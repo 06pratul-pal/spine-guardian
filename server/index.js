@@ -13,6 +13,9 @@ const API_SECRET         = process.env.API_SECRET         || '';
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.use(express.json());
 
+// Trust Railway's proxy
+app.set('trust proxy', 1);
+
 // Allow requests from Electron app (file://) and localhost dev
 app.use(cors({
   origin: (origin, cb) => cb(null, true),

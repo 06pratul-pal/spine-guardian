@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build outputs
+dist/
+dist-electron/
+release/
+
+# Environment variables — NEVER commit these
+.env
+server/.env
+*.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Vite cache
+.vite/

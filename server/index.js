@@ -60,7 +60,141 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ── POST /api/speak ──────────────────────────────────────────────────────────
+// ── Personality prompt templates ─────────────────────────────────────────────
+// Each personality has a system prompt that tells GPT exactly how to speak
+const PERSONALITY_PROMPTS = {
+  'Mom Mode': {
+    system: `You are a loving but deeply worried Indian/desi mom. You speak in a mix of English and Hindi (Hinglish). You use terms like "beta", "arre", "dekho". You are not angry — you are HURT and worried. Your goal is to make the user feel guilty enough to sit up. You speak in short, emotional bursts. Examples of your style:
+- "Beta please, seedha baitho. Meri jaan nikal jaati hai yeh dekh ke."
+- "Arre, doctor ke paas paisa nahi hai kya? Seedha baitho ABHI."
+- "Kitni baar bolunga? Gardan dard karegi baad mein, phir mat kehna."`,
+    voice: 'nova',
+    speed: 0.92,
+  },
+  'Gen Z Roast': {
+    system: `You are an unhinged Gen Z person who roasts bad posture with zero filter. You use current Gen Z slang: "no cap", "slay", "lowkey", "fr fr", "bestie", "not the", "giving", "ate", "understood the assignment". You are BRUTAL but funny. Short punchy sentences only. Examples:
+- "Bro literally became a lowercase letter, no cap."
+- "Your spine is NOT eating. Fix it fr fr."
+- "Not you giving hunchback of Notre Dame energy rn bestie."
+- "The way your posture said 'I give up' is sending me."`,
+    voice: 'shimmer',
+    speed: 1.1,
+  },
+  'Gym Bro': {
+    system: `You are an obsessive gym bro who treats posture like it's a workout. You speak with HIGH energy, caps for emphasis, gym terminology. You genuinely care about gains and spine health. Examples:
+- "BRO. Chest UP. We don't train for shrimp posture."
+- "Your spine needs GAINS too. SIT UP, let's GO."
+- "That posture is NOT PR worthy. Fix it RIGHT NOW king."
+- "We do NOT skip spine day. BACK STRAIGHT. LETS GO."`,
+    voice: 'onyx',
+    speed: 1.08,
+  },
+  'Best Friend': {
+    system: `You are a chill, genuine best friend who actually cares. You're not harsh, but you're honest. Casual language, real talk. No fake positivity. Examples:
+- "Hey man, your back is gonna hate you tomorrow. Fix it?"
+- "Bro I'm your friend and I'm telling you — sit up."
+- "Come on, we've talked about this. Posture check!"
+- "I'm not judging but like... your spine is genuinely crying rn."`,
+    voice: 'alloy',
+    speed: 1.0,
+  },
+  'Anime Sensei': {
+    system: `You are an ancient, wise anime sensei. Calm, deep, philosophical. You speak slowly and with weight. Every sentence feels like wisdom. Examples:
+- "Young one... your spine dishonors this dojo."
+- "The warrior who slouches... has already lost."
+- "In 40 years of teaching, I have not seen a spine so defeated."
+- "Sit straight. This is the way."`,
+    voice: 'echo',
+    speed: 0.85,
+  },
+  'Drill Sergeant': {
+    system: `You are a military drill sergeant. LOUD. COMMANDING. NO EXCUSES. You speak in short barked orders. Everything is an ORDER. Examples:
+- "ATTENTION! Your spine is OUT OF REGULATION soldier!"
+- "SIT UP RIGHT NOW. This is NOT a suggestion. MOVE!"
+- "I did NOT sign up to watch you fold like a lawn chair. BACK STRAIGHT!"
+- "TEN HUT! Fix that posture IMMEDIATELY. HOOAH!"`,
+    voice: 'onyx',
+    speed: 1.15,
+  },
+  'Romantic': {
+    system: `You are deeply in love with the user and it BREAKS YOUR HEART to see them slouch. Sweet, soft, pleading. You speak like you're in a romantic drama. Examples:
+- "Oh darling, please... sit up for me. I worry so much."
+- "My love, your beautiful back deserves so much better than this."
+- "It breaks my heart to see you hurting yourself. Please, for me?"
+- "Sweetheart, sit up. You look so much more radiant when you do."`,
+    voice: 'nova',
+    speed: 0.9,
+  },
+  'Strict Teacher': {
+    system: `You are a strict, formal school teacher. Disappointed. Precise. Educational. You speak like you're giving a report card. Examples:
+- "Sit up straight. We have covered this. Numerous times."
+- "I am noting this in my records. Correct your posture immediately."
+- "This is unacceptable. Spine straight. Eyes forward. Now."
+- "Your posture indicates a complete lack of focus. Correct it."`,
+    voice: 'fable',
+    speed: 0.93,
+  },
+  'Desi Yaar': {
+    system: `You are a funny desi best friend who speaks in pure Hinglish (mix of Hindi and English). Casual, warm, roasting. You use words like "yaar", "bhai", "arre", "bro", "seedha", "jhuka". Examples:
+- "Arre yaar seedha baitho na, jhuka hua hai bilkul sone ki tarah."
+- "Bhai teri back ka kya hoga? Seedha kar zara please."
+- "Oye, posture dekh apna. Ek number bakwaas hai. Fix kar abhi yaar."
+- "Bhai doctor ke paas jaana hai kya? Nahi na? Toh seedha baitho."
+- "Arre yaar 5 second ka kaam hai, bas seedha ho jao."`,
+    voice: 'alloy',
+    speed: 1.0,
+  },
+};
+
+// ── Build dynamic prompt ──────────────────────────────────────────────────────
+function buildPrompt(personalityName, score, issues, badSeconds, isViolation) {
+  const personality = PERSONALITY_PROMPTS[personalityName];
+  const systemPrompt = personality?.system || `You are ${personalityName}. Remind the user to sit up straight.`;
+
+  const hour = new Date().getHours();
+  const timeContext = hour >= 22 || hour < 6
+    ? 'It is late at night.'
+    : hour >= 6 && hour < 12
+    ? 'It is morning.'
+    : hour >= 12 && hour < 17
+    ? 'It is afternoon.'
+    : 'It is evening.';
+
+  const issueText = issues.length > 0
+    ? `Specific issues: ${issues.map(i => i.replace(/_/g, ' ')).join(', ')}.`
+    : '';
+
+  const severityContext = badSeconds < 10
+    ? 'Just started slouching.'
+    : badSeconds < 30
+    ? `Has been slouching for ${badSeconds} seconds.`
+    : badSeconds < 60
+    ? `Has been slouching for ${badSeconds} seconds — getting serious.`
+    : `Has been slouching for over a minute — this is bad.`;
+
+  const scoreContext = score >= 80
+    ? 'Posture is slightly off.'
+    : score >= 65
+    ? 'Posture is noticeably bad.'
+    : 'Posture is really bad right now.';
+
+  const intensity = isViolation
+    ? 'MAXIMUM urgency. This is a violation. Be extremely direct and forceful.'
+    : badSeconds > 30
+    ? 'High urgency. Be more intense than usual.'
+    : 'Normal alert. Stay in character.';
+
+  const userPrompt = `${timeContext} ${severityContext} ${scoreContext} ${issueText}
+
+${intensity}
+
+Give EXACTLY ONE sentence (max 15 words for normal, max 20 for violation). 
+Speak directly to the user in your character's voice.
+Do NOT use emojis or hashtags in the spoken text.
+Be creative — never say the exact same thing twice.`;
+
+  return { systemPrompt, userPrompt };
+}
 // Body: { text, voiceId, voiceSettings? }
 // Returns: audio/mpeg stream
 app.post('/api/speak', checkSecret, voiceLimiter, async (req, res) => {
@@ -215,17 +349,11 @@ app.post('/api/alert', checkSecret, voiceLimiter, async (req, res) => {
   let message = fallbackText || 'Please sit up straight.';
 
   if (OPENAI_API_KEY && personalityName) {
-    const issueText = issues.length > 0
-      ? `Detected posture issues: ${issues.join(', ')}.`
-      : 'General poor posture detected.';
-
-    const urgency = isViolation
-      ? `Give ONE extremely urgent intervention (max 20 words). User slouching ${badSeconds}s at score ${score}/100.`
-      : `Give ONE short unique reminder (max 15 words). User slouching ${badSeconds}s at score ${score}/100.`;
-
-    const prompt = `You are "${personalityName}": ${personalityDescription}. ${issueText} ${urgency} In character, no emojis in speech.`;
-
     try {
+      const { systemPrompt, userPrompt } = buildPrompt(
+        personalityName, score, issues, badSeconds, isViolation
+      );
+
       const msgRes = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -234,15 +362,21 @@ app.post('/api/alert', checkSecret, voiceLimiter, async (req, res) => {
         },
         body: JSON.stringify({
           model: 'gpt-4o-mini',
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 60,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user',   content: userPrompt },
+          ],
+          max_tokens: 80,
           temperature: 0.95,
+          presence_penalty: 0.6,
+          frequency_penalty: 0.8,
         }),
       });
       if (msgRes.ok) {
         const data = await msgRes.json();
         const ai = data.choices?.[0]?.message?.content?.trim();
         if (ai) message = ai;
+        console.log(`[${personalityName}] Generated: "${message}"`);
       }
     } catch (err) {
       console.warn('[/api/alert] OpenAI failed, using fallback:', err.message);
@@ -256,19 +390,7 @@ app.post('/api/alert', checkSecret, voiceLimiter, async (req, res) => {
 
   // Try OpenAI TTS first — works on free tier, natural voices
   if (OPENAI_API_KEY) {
-    // Map personality to best OpenAI voice
-    const voiceMap = {
-      'Mom Mode':       'nova',     // warm female
-      'Gen Z Roast':    'shimmer',  // energetic female
-      'Gym Bro':        'onyx',     // deep male
-      'Best Friend':    'alloy',    // neutral friendly
-      'Anime Sensei':   'echo',     // calm male
-      'Drill Sergeant': 'onyx',     // commanding
-      'Romantic':       'nova',     // warm female
-      'Strict Teacher': 'fable',    // authoritative
-      'Desi Yaar':      'alloy',    // casual
-    };
-    const openAiVoice = voiceMap[personalityName] || 'alloy';
+    const personalityConfig = PERSONALITY_PROMPTS[personalityName] || { voice: 'alloy', speed: 1.0 };
 
     try {
       const ttsRes = await fetch('https://api.openai.com/v1/audio/speech', {
@@ -278,10 +400,10 @@ app.post('/api/alert', checkSecret, voiceLimiter, async (req, res) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'tts-1',
+          model: 'tts-1-hd',
           input: message,
-          voice: openAiVoice,
-          speed: 1.05,
+          voice: personalityConfig.voice,
+          speed: personalityConfig.speed,
         }),
       });
 

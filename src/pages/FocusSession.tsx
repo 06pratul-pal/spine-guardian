@@ -4,7 +4,7 @@ import { Play, Square, RotateCcw, Coffee, Zap, Timer } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { PERSONALITIES } from '../lib/personalities';
 import { usePostureDetection } from '../hooks/usePostureDetection';
-import { useVoice, speakAlert } from '../hooks/useVoice';
+import { useVoice, speakAlert, pickNoRepeat } from '../hooks/useVoice';
 import { addSession, addOrUpdateSnapshot, todayString } from '../lib/database';
 import { buildAndCheckAchievements } from '../lib/achievements';
 import { ScoreRing } from '../components/ScoreRing';
@@ -120,11 +120,12 @@ export function FocusSession() {
       if (result.score < 85) {
         if (!badPostureStartRef.current) badPostureStartRef.current = now;
         const badDuration = now - badPostureStartRef.current;
+        const isLyingBack = result.issues.includes('lying_back');
+
         if (badDuration >= alertDelayMs && now - lastAlertRef.current > cooldownMs) {
           lastAlertRef.current = now;
-          const fallback = personality.badPostureMessages[
-            Math.floor(Math.random() * personality.badPostureMessages.length)
-          ]!;
+          const msgPool = isLyingBack ? personality.violationMessages : personality.badPostureMessages;
+          const fallback = pickNoRepeat(msgPool, `${personality.id}-bad`);
           void speakAlert({
             text: fallback,
             personality,
@@ -133,14 +134,12 @@ export function FocusSession() {
             score: result.score,
             issues: result.issues,
             badSeconds: Math.round(badDuration / 1000),
-            isViolation: false,
+            isViolation: isLyingBack,
           });
         }
-        if (result.score < 55 && badDuration >= 20_000) {
+        if ((result.score < 55 || isLyingBack) && badDuration >= 20_000) {
           badPostureStartRef.current = now;
-          const fallbackViol = personality.violationMessages[
-            Math.floor(Math.random() * personality.violationMessages.length)
-          ]!;
+          const fallbackViol = pickNoRepeat(personality.violationMessages, `${personality.id}-viol`);
           void speakAlert({
             text: fallbackViol,
             personality,
@@ -250,7 +249,8 @@ export function FocusSession() {
             setPhase('break');
             return breakDur;
           } else {
-            void handleComplete();
+            // Use a ref-stable callback to avoid stale closure
+            setPhase('complete');
             return 0;
           }
         }
@@ -263,6 +263,14 @@ export function FocusSession() {
     }, 1000);
     return () => clearInterval(interval);
   }, [phase, postureResult]);
+
+  // Trigger handleComplete when phase transitions to 'complete'
+  useEffect(() => {
+    if (phase === 'complete') {
+      void handleComplete();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
   useEffect(() => () => { stopCamera(); }, [stopCamera]);
 

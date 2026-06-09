@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Square, AlertTriangle, CheckCircle, Loader, Volume2, Crosshair, X } from 'lucide-react';
+import { Play, Square, Pause, AlertTriangle, CheckCircle, Loader, Volume2, Crosshair, X } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { PERSONALITIES } from '../lib/personalities';
 import { ISSUE_DESCRIPTIONS } from '../lib/posture-analyzer';
 import { ScoreRing } from '../components/ScoreRing';
 import { usePostureDetection } from '../hooks/usePostureDetection';
-import { useVoice, speakAlert } from '../hooks/useVoice';
+import { useVoice, speakAlert, pickNoRepeat } from '../hooks/useVoice';
 import { addSession, addOrUpdateSnapshot, todayString } from '../lib/database';
 import { buildAndCheckAchievements } from '../lib/achievements';
 import { CalibrationModal } from '../components/CalibrationModal';
@@ -67,6 +67,7 @@ export function LiveMonitor() {
   const [alertStatus,     setAlertStatus]     = useState<AlertStatus>({ kind: 'idle' });
   const [testingVoice,    setTestingVoice]     = useState(false);
   const [showCalibModal,  setShowCalibModal]   = useState(false);
+  const [isPaused,        setIsPaused]         = useState(false);
 
   async function writeSnapshot() {
     if (scoresRef.current.length === 0) return;
@@ -83,6 +84,7 @@ export function LiveMonitor() {
 
   const handlePostureResult = useCallback(
     (result: PostureResult) => {
+      if (isPaused) return;  // skip all processing when paused
       setPostureResult(result);
       scoresRef.current.push(result.score);
       if (result.score < 85) slouchCountRef.current++;
@@ -103,9 +105,11 @@ export function LiveMonitor() {
           // Mark cooldown immediately to prevent double-firing
           lastAlertTimeRef.current = now;
 
-          const fallbackMsg = personality.badPostureMessages[
-            Math.floor(Math.random() * personality.badPostureMessages.length)
-          ]!;
+          const isLyingBack = result.issues.includes('lying_back');
+          const msgPool = isLyingBack
+            ? personality.violationMessages
+            : personality.badPostureMessages;
+          const fallbackMsg = pickNoRepeat(msgPool, `${personality.id}-bad`);
 
           void speakAlert({
             text: fallbackMsg,
@@ -123,11 +127,9 @@ export function LiveMonitor() {
           });
         }
 
-        if (result.score < 55 && badDuration >= 20_000 && !violationShownRef.current) {
+        if ((result.score < 55 || isLyingBack) && badDuration >= 20_000 && !violationShownRef.current) {
           violationShownRef.current = true;
-          const fallbackViol = personality.violationMessages[
-            Math.floor(Math.random() * personality.violationMessages.length)
-          ]!;
+          const fallbackViol = pickNoRepeat(personality.violationMessages, `${personality.id}-viol`);
 
           void speakAlert({
             text: fallbackViol,
@@ -146,7 +148,7 @@ export function LiveMonitor() {
         violationShownRef.current  = false;
       }
     },
-    [settings, personality, showViolation, setPostureResult, voiceAudioRef, voiceConfigRef]  );
+    [settings, personality, showViolation, setPostureResult, voiceAudioRef, voiceConfigRef, isPaused]);
 
   const { videoRef, canvasRef, isReady, isLoading, error, startCamera, stopCamera, startCalibration } =
     usePostureDetection(settings.sensitivity, handlePostureResult, calibration);
@@ -231,6 +233,7 @@ export function LiveMonitor() {
 
   const handleStop = async () => {
     setIsMonitoring(false);
+    setIsPaused(false);
     endSession();
     stopCamera();
     cancel();
@@ -244,6 +247,12 @@ export function LiveMonitor() {
     const now             = Date.now();
     const durationSeconds = Math.round((now - sessionStartRef.current) / 1000);
     if (durationSeconds > 5) {
+      // Compute real avg score from collected scores
+      const allScores = [...scoresRef.current];
+      const avgScore = allScores.length > 0
+        ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
+        : 0;
+
       await addSession({
         date: todayString(),
         startedAt: sessionStartRef.current,
@@ -252,7 +261,7 @@ export function LiveMonitor() {
         durationSeconds,
         goodSeconds: sessionGoodSeconds,
         badSeconds: sessionBadSeconds,
-        avgScore: 0,
+        avgScore,
         slouchCount: slouchCountRef.current,
       });
 
@@ -261,7 +270,7 @@ export function LiveMonitor() {
         totalXP,
         level,
         lastSessionSlouchCount: slouchCountRef.current,
-        lastSessionAvgScore: 0,
+        lastSessionAvgScore: avgScore,
         lastSessionType: 'monitoring',
       });
       for (const a of newAchievements) enqueueAchievement(a);
@@ -300,6 +309,28 @@ export function LiveMonitor() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Pause button — only visible while monitoring */}
+          {isMonitoring && (
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => {
+                setIsPaused((p) => !p);
+                badPostureStartRef.current = null;
+                setAlertStatus({ kind: 'idle' });
+              }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold"
+              style={{
+                background: isPaused ? 'rgba(251,191,36,0.12)' : 'rgba(255,255,255,0.06)',
+                color: isPaused ? '#fbbf24' : 'rgba(255,255,255,0.5)',
+                border: `1px solid ${isPaused ? 'rgba(251,191,36,0.25)' : 'rgba(255,255,255,0.08)'}`,
+              }}
+              title={isPaused ? 'Resume monitoring' : 'Pause alerts temporarily'}
+            >
+              {isPaused ? '▶ Resume' : '⏸ Pause'}
+            </motion.button>
+          )}
+
           {/* Test Voice button */}
           <motion.button
             whileHover={{ scale: 1.04 }}

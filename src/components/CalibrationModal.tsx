@@ -225,6 +225,17 @@ export function CalibrationModal({
                 </p>
               </div>
 
+              {/* Ears fallback warning */}
+              {result.earsFallback && (
+                <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl"
+                  style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)' }}>
+                  <AlertTriangle size={13} style={{ color: '#fbbf24', flexShrink: 0, marginTop: 1 }} />
+                  <p className="text-xs leading-relaxed" style={{ color: '#fde68a' }}>
+                    Ears weren't visible — neck baseline used a default. Recalibrate with your full head in frame for best accuracy.
+                  </p>
+                </div>
+              )}
+
               {/* Summary */}
               <div className="grid grid-cols-2 gap-2">
                 {[

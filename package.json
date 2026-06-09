@@ -22,7 +22,10 @@
   "license": "MIT",
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.14",
+    "@sentry/electron": "^5.3.0",
+    "@supabase/supabase-js": "^2.43.4",
     "edge-tts": "^1.0.1",
+    "electron-updater": "^6.3.4",
     "framer-motion": "^11.0.5",
     "idb": "^8.0.3",
     "lucide-react": "^0.323.0",

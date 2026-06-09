@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Volume2, Sliders, Clock, BellOff, MonitorCheck,
-  CheckCircle, XCircle, Sparkles, Key, type LucideIcon,
+  CheckCircle, XCircle, Sparkles, Download, Zap, type LucideIcon,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
 import { PERSONALITY_LIST, PERSONALITIES } from '../lib/personalities';
-import { useVoice, speakAlert } from '../hooks/useVoice';
+import { useVoice, speakAlert, pickNoRepeat } from '../hooks/useVoice';
+import { getAllSessions, getSnapshotsInRange, getLast7Days } from '../lib/database';
 
 // Edge TTS voices — free, natural, no API key
 const EDGE_TTS_VOICES = [
@@ -52,16 +53,22 @@ function RangeSlider({
 
 type TTSStatus = { voices: number } | null;
 
-export function Settings() {
+export function Settings({ onUpgrade }: { onUpgrade?: () => void }) {
   const { settings, updateSettings, totalXP, level, streakDays } = useAppStore();
   const [testingVoice,    setTestingVoice]    = useState(false);
   const [launchOnStartup, setLaunchOnStartup] = useState(false);
   const [ttsStatus,       setTtsStatus]       = useState<TTSStatus>(null);
+  const [appVersion,      setAppVersion]      = useState('');
+  const [exporting,       setExporting]       = useState(false);
   const isElectron = !!window.electronAPI;
 
   useEffect(() => {
     if (window.electronAPI?.getLaunchOnStartup) {
       void window.electronAPI.getLaunchOnStartup().then(setLaunchOnStartup);
+    }
+    // Get app version
+    if ((window.electronAPI as any)?.getAppVersion) {
+      void (window.electronAPI as any).getAppVersion().then((v: string) => setAppVersion(v));
     }
   }, []);
 
@@ -98,9 +105,8 @@ export function Settings() {
     if (testingVoice) return;
     setTestingVoice(true);
     const p = PERSONALITIES[settings.personalityId];
-    // Use full speakAlert pipeline — generates AI roast + ElevenLabs voice
     void speakAlert({
-      text: p.badPostureMessages[Math.floor(Math.random() * p.badPostureMessages.length)]!,
+      text: pickNoRepeat(p.badPostureMessages, `${p.id}-bad`),
       personality: p,
       config: voiceConfigRef.current,
       audioRef: voiceAudioRef,
@@ -110,6 +116,37 @@ export function Settings() {
       isViolation: false,
     });
     setTimeout(() => setTestingVoice(false), 5000);
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    try {
+      const sessions  = await getAllSessions();
+      const days      = getLast7Days();
+      const snapshots = await getSnapshotsInRange(days[0]!, days[days.length - 1]!);
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        appVersion,
+        stats: { totalXP, level, streakDays },
+        settings: {
+          personalityId: settings.personalityId,
+          sensitivity: settings.sensitivity,
+          alertDelaySeconds: settings.alertDelaySeconds,
+          cooldownMinutes: settings.cooldownMinutes,
+        },
+        sessions,
+        snapshots,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement('a');
+      a.href     = url;
+      a.download = `spine-guardian-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
@@ -382,6 +419,7 @@ export function Settings() {
           System
         </h3>
 
+        {/* Launch on startup */}
         <div className="flex items-center justify-between">
           <div>
             <p className="text-sm font-medium" style={{ color: '#e4e4f0' }}>Launch at Windows startup</p>
@@ -407,6 +445,55 @@ export function Settings() {
           </motion.button>
         </div>
 
+        {/* Export data */}
+        <div className="flex items-center justify-between pt-3"
+          style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+          <div>
+            <p className="text-sm font-medium" style={{ color: '#e4e4f0' }}>Export your data</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Download all sessions and stats as JSON
+            </p>
+          </div>
+          <motion.button
+            whileHover={{ scale: 1.04 }}
+            whileTap={{ scale: 0.96 }}
+            onClick={() => void handleExportData()}
+            disabled={exporting}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              color: exporting ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.55)',
+            }}
+          >
+            <Download size={12} />
+            {exporting ? 'Exporting…' : 'Export'}
+          </motion.button>
+        </div>
+
+        {/* Check for updates */}
+        {isElectron && (
+          <div className="flex items-center justify-between pt-3"
+            style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+            <div>
+              <p className="text-sm font-medium" style={{ color: '#e4e4f0' }}>Check for updates</p>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                {appVersion ? `Current version: v${appVersion}` : 'Updates install automatically on quit'}
+              </p>
+            </div>
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => void (window.electronAPI as any)?.checkForUpdates?.()}
+              className="px-3 py-1.5 rounded-xl text-xs font-semibold"
+              style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.55)' }}
+            >
+              Check Now
+            </motion.button>
+          </div>
+        )}
+
+        {/* Reset onboarding */}
         <div className="flex items-center justify-between pt-3"
           style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
           <div>
@@ -425,13 +512,32 @@ export function Settings() {
         </div>
       </div>
 
+      {/* Upgrade to Pro */}
+      {onUpgrade && (
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          onClick={onUpgrade}
+          className="flex items-center justify-center gap-3 py-4 rounded-2xl text-sm font-bold"
+          style={{
+            background: 'linear-gradient(135deg,rgba(124,58,237,0.25),rgba(109,40,217,0.15))',
+            border: '1px solid rgba(124,58,237,0.45)',
+            color: '#a78bfa',
+            boxShadow: '0 0 30px rgba(124,58,237,0.15)',
+          }}
+        >
+          <Zap size={16} />
+          Upgrade to Pro — AI Voice + Emotional Roasts
+        </motion.button>
+      )}
+
       {/* Privacy */}
       <div className="rounded-2xl p-4"
         style={{ background: 'rgba(124,58,237,0.05)', border: '1px solid rgba(124,58,237,0.12)' }}>
         <p className="text-xs font-bold mb-1" style={{ color: '#a78bfa' }}>🔒 Privacy</p>
         <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          All webcam and posture processing is 100% local via MediaPipe AI — nothing leaves your device.
-          Voice and AI roasts go through Spine Guardian's server — no personal data is stored.
+          Webcam and posture detection is 100% local via MediaPipe — never leaves your device.
+          Voice alerts and AI roasts go through Spine Guardian's server — no personal data stored.
         </p>
       </div>
     </div>

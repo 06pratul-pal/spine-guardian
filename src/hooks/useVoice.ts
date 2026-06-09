@@ -15,10 +15,19 @@ export interface VoiceConfig {
   serverSecret?: string;  // optional API_SECRET from server .env
 }
 
-// Server URL — change this to your deployed URL when hosting
-// In dev it points to localhost:3001
-export const DEFAULT_SERVER_URL = 'http://localhost:3001';
-export const DEFAULT_SERVER_SECRET = 'spineguardian123';
+// Server URL — points to your deployed Railway backend
+// Secret is NOT hardcoded here — it must be set via environment variable
+// at build time: VITE_SERVER_URL and VITE_SERVER_SECRET in .env
+export const DEFAULT_SERVER_URL =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SERVER_URL as string) ||
+  'https://spine-guardian-production.up.railway.app';
+
+// Secret is read from build-time env — never hardcoded in source
+const _envSecret =
+  typeof import.meta !== 'undefined'
+    ? ((import.meta as any).env?.VITE_SERVER_SECRET as string | undefined)
+    : undefined;
+export const DEFAULT_SERVER_SECRET = _envSecret || '';
 
 // ---------------------------------------------------------------------------
 // Audio context unlock
@@ -55,8 +64,27 @@ if (typeof window !== 'undefined') {
 }
 
 // ---------------------------------------------------------------------------
-// Play audio blob/buffer
+// No-repeat fallback message picker
+// Shuffles the pool and cycles through all messages before repeating any
 // ---------------------------------------------------------------------------
+const _usedFallbacks = new Map<string, number[]>(); // key -> used indices
+
+function pickNoRepeat(pool: string[], key: string): string {
+  if (pool.length === 0) return '';
+  if (pool.length === 1) return pool[0]!;
+
+  let used = _usedFallbacks.get(key) ?? [];
+  // If we've used all, reset
+  if (used.length >= pool.length) used = [];
+
+  const available = pool.map((_, i) => i).filter(i => !used.includes(i));
+  const idx = available[Math.floor(Math.random() * available.length)]!;
+  used.push(idx);
+  _usedFallbacks.set(key, used);
+  return pool[idx]!;
+}
+
+
 async function playBlob(
   blob: Blob,
   volume: number,
@@ -131,12 +159,8 @@ async function serverAlert(opts: {
       badSeconds: badSeconds ?? 5,
       isViolation: isViolation ?? false,
       fallbackText: text,
-      voiceSettings: {
-        stability: 0.45,
-        similarity_boost: 0.80,
-        style: 0.35,
-        use_speaker_boost: true,
-      },
+      // Do NOT send voiceSettings — let the server pick the right emotional
+      // settings per personality and severity via getVoiceSettings()
     }),
   });
 
@@ -237,28 +261,53 @@ export async function speakAlert(opts: {
   isViolation?: boolean;
   onMessageReady?: (msg: string) => void;
 }): Promise<void> {
-  const { config, personality, audioRef } = opts;
+  const { config, personality } = opts;
 
-  // Priority 1: Use your server (best UX — user doesn't need API keys)
-  const serverUrl = config.serverUrl || DEFAULT_SERVER_URL;
+  // Priority 1: Server (handles OpenAI roast + TTS in one call)
+  // Always try the server first — it gives the best AI-generated roasts
+  // and is aware of the actual issues (including lying_back).
   try {
     await serverAlert(opts);
     return;
   } catch (err) {
-    console.warn('[Server] failed, trying direct ElevenLabs:', (err as Error).message);
+    console.warn('[Server] failed, trying next fallback:', (err as Error).message);
   }
 
-  // Priority 2: Direct ElevenLabs with user's own key
+  // Priority 2: Direct ElevenLabs with user's own key (Electron IPC path)
   if (config.mode === 'elevenlabs' && config.elevenLabsApiKey?.trim()) {
     try {
       await directElevenLabsAlert(opts);
       return;
     } catch (err) {
-      console.warn('[ElevenLabs direct] failed, falling back to browser TTS:', (err as Error).message);
+      console.warn('[ElevenLabs direct] failed, falling back to Edge TTS:', (err as Error).message);
     }
   }
 
-  // Priority 3: Browser TTS fallback
+  // Priority 3: Edge TTS (free natural Microsoft voice, via Electron IPC)
+  if (config.mode === 'edge') {
+    const api = (window as any).electronAPI;
+    if (api?.edgeTtsSpeak) {
+      try {
+        const voice = config.edgeTtsVoice || 'en-US-JennyNeural';
+        const result = await api.edgeTtsSpeak(opts.text, voice, '+0%', '+0Hz') as
+          | { ok: true; base64: string }
+          | { ok: false; error: string };
+        if (result.ok) {
+          opts.onMessageReady?.(opts.text);
+          const bytes = atob(result.base64);
+          const buf   = new Uint8Array(bytes.length);
+          for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+          const audioRef = opts.audioRef;
+          await playBlob(new Blob([buf], { type: 'audio/mpeg' }), config.volume, audioRef);
+          return;
+        }
+      } catch (err) {
+        console.warn('[Edge TTS] failed, falling back to browser TTS:', (err as Error).message);
+      }
+    }
+  }
+
+  // Priority 4: Browser TTS (always works, robotic but reliable)
   opts.onMessageReady?.(opts.text);
   browserSpeak(opts.text, personality, config.volume);
 }
@@ -284,6 +333,8 @@ export async function generateAiMessage(
     return result.ok ? result.message : null;
   } catch { return null; }
 }
+
+export { pickNoRepeat };
 
 // ---------------------------------------------------------------------------
 // Hook

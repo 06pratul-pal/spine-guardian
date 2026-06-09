@@ -9,6 +9,9 @@ export type PersonalityId =
   | 'teacher'
   | 'desi';
 
+// Issue type re-exported so personalities can reference it
+export type PostureIssueRef = 'lying_back';
+
 export interface Personality {
   id: PersonalityId;
   name: string;
@@ -54,10 +57,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'Yeh posture dekh ke dil dukta hai mera. Fix kar abhi.',
       'Doctor ke paas paisa nahi hai hamesha jaane ke liye. Seedha baith!',
       'Kab sudhroge? Peetha seedha karo abhi!',
+      'Beta yeh kya kar rahe ho? Baith seedha, let mat jao kaam karte waqt!',
     ],
     violationMessages: [
       'BAS! Abhi seedha baitho! Main bilkul serious hun!',
       'Yeh toh hadd ho gayi! Seedha baitho ABHI! No excuses!',
+      'Arre beta kaam kar rahe ho ya so rahe ho? SEEDHA BAITHO ABHI!',
     ],
   },
 
@@ -85,10 +90,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'POV: you about to have back problems at twenty five.',
       'The way you are NOT girlbossing right now. Embarrassing.',
       'Main character energy does NOT include hunchback mode.',
+      'Bro said let me just casually become horizontal at my desk. Not it.',
     ],
     violationMessages: [
       'LMAO absolutely not. Sit up RIGHT NOW. Touch grass and your spine.',
       'We are NOT doing the hunchback of Notre Dame arc. SIT UP. Now.',
+      'Are you actually lying down while working?? That is NOT the slay we needed bestie. UP. NOW.',
     ],
   },
 
@@ -116,10 +123,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'A weak posture means weak gains. Fix it RIGHT NOW.',
       'Bro I am not going to lie, your back needs a serious PR.',
       'We do not skip spine day. SIT UP.',
+      'Bro are you literally reclining right now? That is not a rest day, that is a FAILURE day. UP!',
     ],
     violationMessages: [
       'ALRIGHT THAT IS IT. SIT UP RIGHT NOW. NO EXCUSES. LETS GO.',
       'POSTURE CHECK! You are FAILING. Fix it IMMEDIATELY. COME ON.',
+      'LYING BACK AT YOUR DESK?! That is ZERO gains bro. SIT THE HECK UP RIGHT NOW. LETS GO!',
     ],
   },
 
@@ -147,10 +156,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'Come on, we have talked about this. Posture check!',
       'I am not judging but like... your spine is definitely crying.',
       'Hey real quick, can you sit up? Just a tiny bit? Thanks.',
+      'Dude are you actually leaning all the way back? That is genuinely bad for you. Sit up.',
     ],
     violationMessages: [
       'Okay dude. I am your friend and I am telling you, sit UP. Right now.',
       'Thirty seconds of bad posture?! I am genuinely concerned. SIT UP.',
+      'Hey I say this with love — you are basically lying down. That is not working, that is napping. SIT UP.',
     ],
   },
 
@@ -178,10 +189,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'Sensei is watching. And Sensei is... deeply disappointed.',
       'In my 40 years of teaching, I have never seen a spine so defeated.',
       'Even the willow tree returns to its form. You must do the same.',
+      'You have abandoned the upright path entirely. Rise, young one. RISE.',
     ],
     violationMessages: [
       'ENOUGH! This slouching dishonors everything I have taught you! Sit STRAIGHT!',
       'The way of the spine is the way of life. You are failing both. FIX IT NOW.',
+      'You dare recline during training?! The warrior does not lie down in battle. SIT STRAIGHT NOW!',
     ],
   },
 
@@ -209,10 +222,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'SLOUCHING is for CIVILIANS! Sit the heck UP right NOW!',
       'I did not sign up to watch you fold like a lawn chair. BACK STRAIGHT!',
       'TEN HUT! Your posture is a DISGRACE to this operation!',
+      'SOLDIER! Are you RECLINING?! This is NOT a HAMMOCK! SIT UP IMMEDIATELY!',
     ],
     violationMessages: [
       'THAT IS IT! DROP AND GIVE ME A STRAIGHT SPINE! RIGHT NOW SOLDIER! MOVE MOVE MOVE!',
       'UNACCEPTABLE! THIRTY SECONDS OF SHAMEFUL POSTURE! SIT UP IMMEDIATELY! THIS IS AN ORDER!',
+      'I HAVE NEVER IN MY CAREER SEEN A SOLDIER LYING BACK AT THEIR POST! SIT UP RIGHT NOW OR YOU ARE ON LATRINE DUTY!',
     ],
   },
 
@@ -240,10 +255,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'My dearest, you are worth so much more than bad posture. Sit up, please.',
       'I notice these things because I care. Your posture, love. Fix it gently.',
       'Sweetheart, you are so wonderful. Your spine should match your beauty.',
+      'My love, are you actually reclining like that? Please come back to me — sit up, darling.',
     ],
     violationMessages: [
       'My love, I am truly worried now. Please sit up RIGHT NOW. I cannot bear to watch this.',
       'Darling this has gone too far. SIT UP immediately. I am asking you, please.',
+      'Sweetheart, you have been lying back this whole time and it is BREAKING my heart. Sit up for me. Now. Please.',
     ],
   },
 
@@ -271,10 +288,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'This class has a posture policy and you are in violation of it.',
       'Slouching indicates lack of focus. Are you paying attention? Sit UP.',
       'I will not repeat myself. Spine straight. Eyes forward. Now.',
+      'Are you reclining? In my class? Sit up this instant. This is completely unacceptable.',
     ],
     violationMessages: [
       'That is it. You are in detention for this posture. SIT UP IMMEDIATELY. I am serious.',
       'I have never in 20 years of teaching seen posture this appalling. Correct it RIGHT NOW.',
+      'Reclining at your desk is not studying, it is sleeping. SIT UPRIGHT. IMMEDIATELY. FINAL WARNING.',
     ],
   },
 
@@ -302,10 +321,12 @@ export const PERSONALITIES: Record<PersonalityId, Personality> = {
       'Oye, kya kar raha hai? Spine compress ho rahi hai teri. Uth ke baith seedha.',
       'Bhai doctor ke paas jaana hai kya? Nahi na? Toh seedha baitho.',
       'Arre yaar 5 second ka kaam hai — just seedha ho jao. Itna bhi nahi hota?',
+      'Yaar tu let gaya kya kaam karte karte?! Uth bhai, seedha baith! Yeh koi sofa nahi hai!',
     ],
     violationMessages: [
       'BAS bhai BAS! Yeh toh hadd ho gayi. ABHI seedha baitho — mujhe mat hasao.',
       'Ek ghante se dekh raha hun yaar — posture bilkul ZERO hai tera. Uth, seedha baith. NOW.',
+      'Bhai seedha baith yaar ABHI! Let ke kaam karna theek nahi hota. Teri kamar toot jaegi. SEEDHA BAITH!',
     ],
   },
 };

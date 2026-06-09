@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Camera, BarChart2,
-  Timer, Settings, Minimize2, type LucideIcon,
+  Timer, Settings, Minimize2, Zap, type LucideIcon,
 } from 'lucide-react';
 import { useAppStore, type Page } from '../store/useAppStore';
 
@@ -32,7 +32,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'settings',  icon: Settings,        label: 'Settings' },
 ];
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function Layout({ children, onUpgrade }: { children: React.ReactNode; onUpgrade?: () => void }) {
   const { page, setPage, isMonitoring, postureResult } = useAppStore();
   const score = postureResult?.score ?? 0;
 
@@ -121,6 +121,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
               {score}
             </span>
           </motion.div>
+        )}
+
+        {/* Upgrade to Pro button */}
+        {onUpgrade && (
+          <motion.button
+            whileHover={{ scale: 1.08 }}
+            whileTap={{ scale: 0.94 }}
+            onClick={onUpgrade}
+            className="flex items-center justify-center rounded-xl mb-1"
+            style={{
+              width: 40, height: 40,
+              background: 'linear-gradient(135deg,rgba(124,58,237,0.3),rgba(109,40,217,0.2))',
+              border: '1px solid rgba(124,58,237,0.4)',
+              color: '#a78bfa',
+            }}
+            title="Upgrade to Pro"
+          >
+            <Zap size={14} />
+          </motion.button>
         )}
 
         {/* Minimize to tray */}

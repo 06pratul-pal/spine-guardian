@@ -1,5 +1,23 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, net } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, net, dialog } from 'electron';
 import path from 'path';
+import * as Sentry from '@sentry/electron/main';
+import { autoUpdater } from 'electron-updater';
+
+// ── Sentry crash reporting ────────────────────────────────────────────────────
+// Replace SENTRY_DSN with your actual DSN from sentry.io
+// Get it free at: https://sentry.io → New Project → Electron
+const SENTRY_DSN = process.env.SENTRY_DSN || '';
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: app.isPackaged ? 'production' : 'development',
+    release: app.getVersion(),
+  });
+}
+
+// ── Auto-updater config ───────────────────────────────────────────────────────
+autoUpdater.autoDownload    = true;   // download silently in background
+autoUpdater.autoInstallOnAppQuit = true; // install when user quits
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -174,6 +192,44 @@ app.whenReady().then(() => {
   createWindow();
   createTray();
 
+  // ── Auto-update ─────────────────────────────────────────────────────────
+  if (app.isPackaged) {
+    // Check for updates 3 seconds after launch (don't block startup)
+    setTimeout(() => {
+      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
+        console.warn('[updater] check failed:', (err as Error)?.message);
+      });
+    }, 3000);
+
+    autoUpdater.on('update-available', (info) => {
+      showTrayBalloon(
+        'Update available',
+        `Spine Guardian ${info.version} is downloading in the background…`
+      );
+    });
+
+    autoUpdater.on('update-downloaded', (info) => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'Update ready',
+        message: `Spine Guardian ${info.version} is ready to install.`,
+        detail: 'Restart now to apply the update, or it will install on next quit.',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) {
+          isQuitting = true;
+          autoUpdater.quitAndInstall();
+        }
+      });
+    });
+
+    autoUpdater.on('error', (err) => {
+      console.error('[updater] error:', (err as Error)?.message);
+      if (SENTRY_DSN) Sentry.captureException(err);
+    });
+  }
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -205,6 +261,14 @@ ipcMain.handle('show-window', () => {
 });
 
 ipcMain.handle('get-platform', () => process.platform);
+
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('check-for-updates', () => {
+  if (!app.isPackaged) return { status: 'dev' };
+  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  return { status: 'checking' };
+});
 
 ipcMain.handle('show-tray-notification', (_event, title: string, content: string) => {
   showTrayBalloon(title, content);

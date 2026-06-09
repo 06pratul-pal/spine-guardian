@@ -8,28 +8,30 @@ module.exports = {
 
   directories: {
     output: 'release',
+    buildResources: 'build-resources',
   },
 
   files: [
-    'dist/**',
     'dist-electron/**',
-    'node_modules/**',
+    'dist/renderer/**',
     'package.json',
   ],
 
-  extraResources: [
-    {
-      from: 'dist/renderer/mediapipe',
-      to:   'mediapipe',
-      filter: ['**/*'],
-    },
-  ],
+  asar: true,
 
+  // ── Auto-update: publish to GitHub Releases ────────────────────────────────
+  // Set GH_TOKEN env var when building to push releases automatically.
+  // Get a token at: GitHub → Settings → Developer settings → Personal access tokens
+  publish: {
+    provider: 'github',
+    owner: '06pratul-pal',
+    repo: 'spine-guardian',
+    releaseType: 'release',
+  },
+
+  // ── Windows ───────────────────────────────────────────────────────────────
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
-    // Icon is generated programmatically in main.ts — no .ico file needed.
-    // To use a custom icon later, place icon.ico in build-resources/ and set:
-    // icon: 'build-resources/icon.ico',
   },
 
   nsis: {
@@ -43,6 +45,18 @@ module.exports = {
     deleteAppDataOnUninstall: false,
   },
 
-  // Publish config left empty — fill in when you set up auto-updates
-  publish: null,
+  // ── Mac ───────────────────────────────────────────────────────────────────
+  // Requires Apple Developer account ($99/yr) for notarization in production.
+  // For testing: build works unsigned, just can't distribute via App Store.
+  mac: {
+    target: [{ target: 'dmg', arch: ['x64', 'arm64'] }],
+    category: 'public.app-category.healthcare-fitness',
+    // For signed builds set: CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_ID_PASS env vars
+  },
+
+  dmg: {
+    title: 'Spine Guardian AI',
+    background: null,
+    window: { width: 540, height: 380 },
+  },
 };

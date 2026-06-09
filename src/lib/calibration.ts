@@ -1,14 +1,15 @@
 import type { Landmark } from './posture-analyzer';
 
 export interface CalibrationData {
-  torsoRatio: number;       // (hipY - shoulderY) / shoulderWidth — body height ratio
-  earRatio: number;         // (shoulderY - earY) / shoulderWidth — neck-to-ear gap
-  shoulderZVsHip: number;   // baseline shoulder depth relative to hips
-  headZVsShoulder: number;  // baseline head depth relative to shoulders
-  shoulderAsymmetry: number;// baseline shoulder height difference
-  shoulderWidth: number;    // average shoulder width (camera/distance normalisation)
+  torsoRatio: number;
+  earRatio: number;
+  shoulderZVsHip: number;
+  headZVsShoulder: number;
+  shoulderAsymmetry: number;
+  shoulderWidth: number;
   sampleCount: number;
   capturedAt: number;
+  earsFallback?: boolean;   // true when ears were not visible — lower quality baseline
 }
 
 const STORAGE_KEY = 'sg-calibration';
@@ -55,10 +56,10 @@ export function computeCalibration(samples: Landmark[][]): CalibrationData {
 
     const torsoRatio = (hipMid.y - shoulderMid.y) / shoulderWidth;
 
-    const earRatio =
-      le && re && (le.visibility ?? 1) >= 0.4 && (re.visibility ?? 1) >= 0.4
-        ? (shoulderMid.y - (le.y + re.y) / 2) / shoulderWidth
-        : 0.18; // sensible default when ears not visible
+    const earsVisible = le && re && (le.visibility ?? 1) >= 0.4 && (re.visibility ?? 1) >= 0.4;
+    const earRatio = earsVisible
+      ? (shoulderMid.y - (le!.y + re!.y) / 2) / shoulderWidth
+      : null; // null = ears not visible in this frame
 
     const shoulderZVsHip = shoulderMid.z - hipMid.z;
 
@@ -83,15 +84,23 @@ export function computeCalibration(samples: Landmark[][]): CalibrationData {
     return metrics.reduce((s, m) => s + (m[key] as number), 0) / metrics.length;
   }
 
+  // Compute earRatio only from frames where ears were visible
+  const earFrames = metrics.filter((m) => m.earRatio !== null);
+  const earRatioAvg = earFrames.length >= 3
+    ? earFrames.reduce((s, m) => s + m.earRatio!, 0) / earFrames.length
+    : 0.18; // fallback default — ears not reliably visible
+  const earsFallback = earFrames.length < 3;
+
   return {
     torsoRatio: avg('torsoRatio'),
-    earRatio: avg('earRatio'),
+    earRatio: earRatioAvg,
     shoulderZVsHip: avg('shoulderZVsHip'),
     headZVsShoulder: avg('headZVsShoulder'),
     shoulderAsymmetry: avg('shoulderAsymmetry'),
     shoulderWidth: avg('shoulderWidth'),
     sampleCount: valid.length,
     capturedAt: Date.now(),
+    earsFallback,
   };
 }
 

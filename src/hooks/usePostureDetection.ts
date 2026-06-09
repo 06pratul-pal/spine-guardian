@@ -220,16 +220,14 @@ export function usePostureDetection(
       await ensureMediaPipe();
 
       // Use local bundled files — no internet required after install
-      // In Electron production: files served from app's dist folder
-      // In Vite dev: served from public/mediapipe/
       const wasmBase =
         typeof window !== 'undefined' && (window as any).electronAPI
-          ? './mediapipe/wasm'       // packaged Electron — relative to index.html
-          : '/mediapipe/wasm';       // Vite dev server
+          ? `${window.location.origin}/mediapipe/wasm`
+          : '/mediapipe/wasm';
 
       const modelPath =
         typeof window !== 'undefined' && (window as any).electronAPI
-          ? './mediapipe/pose_landmarker_full.task'
+          ? `${window.location.origin}/mediapipe/pose_landmarker_full.task`
           : '/mediapipe/pose_landmarker_full.task';
 
       const filesetResolver = await FilesetResolverClass.forVisionTasks(wasmBase);

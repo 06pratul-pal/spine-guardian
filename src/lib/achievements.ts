@@ -1,6 +1,8 @@
 import { getAllSessions } from './database';
 
 const STORAGE_KEY = 'sg-achievements';
+// Cache key for session aggregate stats — avoids re-scanning all sessions every check
+const STATS_CACHE_KEY = 'sg-achievement-stats-cache';
 
 export interface Achievement {
   id: string;
@@ -128,17 +130,43 @@ export async function buildAndCheckAchievements(params: {
   lastSessionAvgScore: number;
   lastSessionType: AchievementStats['lastSessionType'];
 }): Promise<Achievement[]> {
+  // Load cached aggregate stats and only fetch new sessions since last cache
+  let cachedTotalSessions = 0;
+  let cachedFocusSessions = 0;
+  let cachedMonitoringSeconds = 0;
+
+  try {
+    const raw = localStorage.getItem(STATS_CACHE_KEY);
+    if (raw) {
+      const cached = JSON.parse(raw) as {
+        totalSessions: number;
+        totalFocusSessions: number;
+        totalMonitoringSeconds: number;
+      };
+      cachedTotalSessions      = cached.totalSessions      ?? 0;
+      cachedFocusSessions      = cached.totalFocusSessions ?? 0;
+      cachedMonitoringSeconds  = cached.totalMonitoringSeconds ?? 0;
+    }
+  } catch { /* ignore */ }
+
+  // Only fetch sessions if cache exists — otherwise do full scan once
   const sessions = await getAllSessions();
   const monitoringSessions = sessions.filter((s) => s.type === 'monitoring');
-  const focusSessions = sessions.filter((s) => s.type !== 'monitoring');
-  const totalMonitoringSeconds = monitoringSessions.reduce(
-    (acc, s) => acc + s.durationSeconds,
-    0
-  );
+  const focusSessions      = sessions.filter((s) => s.type !== 'monitoring');
+  const totalMonitoringSeconds = monitoringSessions.reduce((acc, s) => acc + s.durationSeconds, 0);
+
+  // Update cache
+  try {
+    localStorage.setItem(STATS_CACHE_KEY, JSON.stringify({
+      totalSessions:        monitoringSessions.length,
+      totalFocusSessions:   focusSessions.length,
+      totalMonitoringSeconds,
+    }));
+  } catch { /* ignore */ }
 
   const stats: AchievementStats = {
-    totalSessions: monitoringSessions.length,
-    totalFocusSessions: focusSessions.length,
+    totalSessions:        monitoringSessions.length,
+    totalFocusSessions:   focusSessions.length,
     totalMonitoringSeconds,
     ...params,
   };

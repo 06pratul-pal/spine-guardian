@@ -13,7 +13,7 @@ const SCORE_LABEL: Record<string, { text: string; color: string }> = {
   poor:      { text: 'Slouching detected — sit up!',     color: '#ef4444' },
 };
 
-export function Dashboard() {
+export function Dashboard({ onUpgrade }: { onUpgrade?: () => void }) {
   const {
     postureResult, totalXP, level, xpProgress,
     streakDays, settings, updateSettings, setPage,

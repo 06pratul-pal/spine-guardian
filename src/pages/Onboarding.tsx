@@ -204,8 +204,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           {current.id === 'ready' && (
             <div className="flex flex-col gap-3 w-full">
               {[
-                '🔒 100% local — nothing leaves your computer',
-                '🔇 Works fully offline after first AI model download',
+                '🔒 Posture detection is 100% local — webcam never leaves your device',
+                '🔊 Voice alerts use our server for AI roasts — no personal data stored',
                 '⚙️ All settings adjustable anytime in Settings',
               ].map((tip) => (
                 <div

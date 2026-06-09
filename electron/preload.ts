@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showWindow: () => ipcRenderer.invoke('show-window'),
   getPlatform: () => ipcRenderer.invoke('get-platform'),
   platform: process.platform,
+  getAppVersion: (): Promise<string> => ipcRenderer.invoke('get-app-version'),
+  checkForUpdates: (): Promise<{ status: string }> => ipcRenderer.invoke('check-for-updates'),
   showTrayNotification: (title: string, content: string) =>
     ipcRenderer.invoke('show-tray-notification', title, content),
   getLaunchOnStartup: (): Promise<boolean> =>

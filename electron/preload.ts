@@ -52,4 +52,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       apiKey, personalityName, personalityDescription,
       score, issues, badSeconds, isViolation
     ),
+
+  // Deep link handler — called when app opened via spine-guardian:// URL
+  onDeepLink: (callback: (url: string) => void) =>
+    ipcRenderer.on('deep-link', (_event, url: string) => callback(url)),
+
+  // Debug logger — writes to userData/debug.log
+  logError: (message: string): Promise<string> =>
+    ipcRenderer.invoke('log-error', message),
 });

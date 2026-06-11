@@ -11,8 +11,9 @@ export interface VoiceConfig {
   edgeTtsVoice?: string;
   openAiApiKey?: string;
   useAiMessages?: boolean;
-  serverUrl?: string;     // your hosted backend URL
-  serverSecret?: string;  // optional API_SECRET from server .env
+  serverUrl?: string;
+  serverSecret?: string;
+  isPro?: boolean;          // controls AI roast generation — Pro users only
 }
 
 // Server URL — points to your deployed Railway backend
@@ -159,6 +160,8 @@ async function serverAlert(opts: {
       badSeconds: badSeconds ?? 5,
       isViolation: isViolation ?? false,
       fallbackText: text,
+      // isPro controls whether server generates AI roast or just speaks fallback text
+      isPro: config.isPro ?? false,
       // Do NOT send voiceSettings — let the server pick the right emotional
       // settings per personality and severity via getVoiceSettings()
     }),

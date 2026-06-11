@@ -12,6 +12,7 @@ import {
   getLevelProgress,
   calculateXPGain,
 } from '../lib/xp-system';
+import { pushCloudSync, pullCloudSync, supabaseConfigured } from '../lib/supabase';
 
 export type Page = 'dashboard' | 'monitor' | 'analytics' | 'focus' | 'settings';
 
@@ -76,6 +77,8 @@ interface AppState {
   sessionActive: boolean;
   achievementQueue: Achievement[];
   calibration: CalibrationData | null;
+  userPlan: 'free' | 'pro';          // ← pro gating
+  isPro: boolean;                     // ← convenience getter
 
   setPage: (page: Page) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
@@ -91,6 +94,9 @@ interface AppState {
   enqueueAchievement: (a: Achievement) => void;
   dequeueAchievement: () => void;
   setCalibration: (data: CalibrationData | null) => void;
+  setUserPlan: (plan: 'free' | 'pro') => void;
+  syncFromCloud: () => Promise<void>;  // pull from Supabase on login
+  syncToCloud: () => Promise<void>;    // push to Supabase after changes
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -110,6 +116,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   sessionActive: false,
   achievementQueue: [],
   calibration: loadCalibration(),
+  userPlan: 'free',
+  isPro: false,
 
   setPage: (page) => set({ page }),
 
@@ -117,15 +125,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     const newSettings = { ...get().settings, ...partial };
     localStorage.setItem('sg-settings', JSON.stringify(newSettings));
     set({ settings: newSettings });
+    // Track personality changes
+    if (partial.personalityId && partial.personalityId !== get().settings.personalityId) {
+      import('../lib/analytics').then(({ track }) => {
+        void track('personality_changed', { from: get().settings.personalityId, to: partial.personalityId });
+      });
+    }
   },
 
   setPostureResult: (result) => set({ postureResult: result }),
-
   setIsMonitoring: (v) => set({ isMonitoring: v }),
-
   showViolation: (message) => set({ isViolationVisible: true, violationMessage: message }),
-
   hideViolation: () => set({ isViolationVisible: false, violationMessage: '' }),
+
+  setUserPlan: (plan) => set({ userPlan: plan, isPro: plan === 'pro' }),
 
   addXP: (amount) => {
     if (amount <= 0) return;
@@ -153,11 +166,75 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   tickBadSecond: () => set((s) => ({ sessionBadSeconds: s.sessionBadSeconds + 1 })),
 
-  enqueueAchievement: (a) =>
-    set((s) => ({ achievementQueue: [...s.achievementQueue, a] })),
+  enqueueAchievement: (a) => {
+    set((s) => ({ achievementQueue: [...s.achievementQueue, a] }));
+    import('../lib/analytics').then(({ track }) => {
+      void track('achievement_unlocked', { achievement_id: a.id, achievement_name: a.name });
+    });
+  },
 
   dequeueAchievement: () =>
     set((s) => ({ achievementQueue: s.achievementQueue.slice(1) })),
 
   setCalibration: (data) => set({ calibration: data }),
+
+  // ── Cloud sync ──────────────────────────────────────────────────────────────
+
+  syncFromCloud: async () => {
+    if (!supabaseConfigured) return;
+    try {
+      const cloud = await pullCloudSync();
+      if (!cloud) return;
+
+      // Use cloud data if it has more XP than local (cloud wins on reinstall)
+      const localXP = get().totalXP;
+      const cloudXP = cloud.total_xp;
+
+      if (cloudXP > localXP) {
+        const level    = calculateLevel(cloudXP);
+        const levelName = getLevelName(level);
+        const xpProgress = getLevelProgress(cloudXP);
+        const xpData = {
+          totalXP: cloudXP,
+          streakDays: cloud.streak_days,
+          lastActiveDate: cloud.last_active_date,
+          totalSessions: 0,
+        };
+        saveXPData(xpData);
+        set({ totalXP: cloudXP, level, levelName, xpProgress, streakDays: cloud.streak_days });
+      }
+
+      // Restore settings from cloud if local is default
+      if (cloud.settings_json && cloud.settings_json !== '{}') {
+        try {
+          const cloudSettings = JSON.parse(cloud.settings_json);
+          const merged = { ...get().settings, ...cloudSettings };
+          localStorage.setItem('sg-settings', JSON.stringify(merged));
+          set({ settings: merged });
+        } catch { /* ignore parse errors */ }
+      }
+
+      // Restore achievements
+      if (cloud.unlocked_achievements && cloud.unlocked_achievements !== '[]') {
+        try {
+          localStorage.setItem('sg-achievements', cloud.unlocked_achievements);
+        } catch { /* ignore */ }
+      }
+    } catch { /* network error — silently ignore, local data is fine */ }
+  },
+
+  syncToCloud: async () => {
+    if (!supabaseConfigured) return;
+    try {
+      const state = get();
+      const xpData = loadXPData();
+      await pushCloudSync({
+        total_xp:              state.totalXP,
+        streak_days:           state.streakDays,
+        last_active_date:      xpData.lastActiveDate,
+        settings_json:         JSON.stringify(state.settings),
+        unlocked_achievements: localStorage.getItem('sg-achievements') ?? '[]',
+      });
+    } catch { /* silently ignore — local save already happened */ }
+  },
 }));

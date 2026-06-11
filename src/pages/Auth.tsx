@@ -10,6 +10,24 @@ interface AuthProps {
   onSkip: () => void;
 }
 
+// Make Supabase error messages user-friendly
+function friendlyError(msg: string): string {
+  if (!msg) return 'Something went wrong. Please try again.';
+  if (msg.includes('Invalid login credentials'))
+    return 'Wrong email or password. Please check and try again.';
+  if (msg.includes('Email not confirmed'))
+    return 'Please confirm your email first. Check your inbox.';
+  if (msg.includes('User already registered'))
+    return 'An account with this email already exists. Try signing in instead.';
+  if (msg.includes('Password should be'))
+    return 'Password must be at least 8 characters.';
+  if (msg.includes('Unable to validate email'))
+    return 'Please enter a valid email address.';
+  if (msg.includes('Failed to fetch') || msg.includes('fetch'))
+    return 'Connection failed. Check your internet and try again.';
+  return msg;
+}
+
 export function Auth({ onAuth, onSkip }: AuthProps) {
   const [mode,      setMode]      = useState<Mode>('signin');
   const [email,     setEmail]     = useState('');
@@ -33,9 +51,9 @@ export function Auth({ onAuth, onSkip }: AuthProps) {
     setLoading(false);
 
     if (result.error) {
-      setError(result.error);
+      setError(friendlyError(result.error));
     } else if (mode === 'signup') {
-      setSuccess('Check your email to confirm your account, then sign in.');
+      setSuccess('Account created! Check your email to confirm, then sign in.');
       setMode('signin');
     } else {
       onAuth();

@@ -523,6 +523,7 @@ app.post('/api/alert', checkSecret, voiceLimiter, async (req, res) => {
     isViolation: _viol,
     fallbackText: _ft,
     voiceSettings,
+    isPro,
   } = req.body;
 
   // Sanitize all inputs
@@ -533,15 +534,18 @@ app.post('/api/alert', checkSecret, voiceLimiter, async (req, res) => {
   const badSeconds      = sanitizeNumber(_bad, 0, 3600, 5);
   const isViolation     = !!_viol;
   const fallbackText    = sanitizeText(_ft, 200);
+  const userIsPro       = !!isPro;
 
   if (!OPENAI_API_KEY && !ELEVENLABS_API_KEY) {
     return res.status(503).json({ error: 'No AI services configured on server' });
   }
 
   // Step 1: Generate message
+  // Free users get the fallback text (pre-written personality messages)
+  // Pro users get AI-generated unique roast via GPT-4o-mini
   let message = fallbackText || 'Please sit up straight.';
 
-  if (OPENAI_API_KEY && personalityName) {
+  if (OPENAI_API_KEY && personalityName && userIsPro) {
     try {
       const recent = getRecentMessages(personalityName);
       const { systemPrompt, userPrompt } = buildPrompt(

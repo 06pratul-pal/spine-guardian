@@ -17,7 +17,7 @@ module.exports = {
     'package.json',
   ],
 
-  asar: true,
+  asar: false,
 
   // ── Auto-update: publish to GitHub Releases ────────────────────────────────
   // Set GH_TOKEN env var when building to push releases automatically.

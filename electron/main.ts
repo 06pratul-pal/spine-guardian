@@ -1,23 +1,35 @@
-import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, net, dialog } from 'electron';
+import { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, net, dialog, session as electronSession } from 'electron';
 import path from 'path';
-import * as Sentry from '@sentry/electron/main';
-import { autoUpdater } from 'electron-updater';
+
+// Safe imports — wrapped to prevent startup crashes if packages missing
+let Sentry: any = null;
+let autoUpdater: any = null;
+
+try {
+  Sentry = require('@sentry/electron/main');
+} catch { /* Sentry not available */ }
+
+try {
+  autoUpdater = require('electron-updater').autoUpdater;
+} catch { /* electron-updater not available */ }
 
 // ── Sentry crash reporting ────────────────────────────────────────────────────
-// Replace SENTRY_DSN with your actual DSN from sentry.io
-// Get it free at: https://sentry.io → New Project → Electron
 const SENTRY_DSN = process.env.SENTRY_DSN || '';
-if (SENTRY_DSN) {
-  Sentry.init({
-    dsn: SENTRY_DSN,
-    environment: app.isPackaged ? 'production' : 'development',
-    release: app.getVersion(),
-  });
+if (SENTRY_DSN && Sentry) {
+  try {
+    Sentry.init({
+      dsn: SENTRY_DSN,
+      environment: app.isPackaged ? 'production' : 'development',
+      release: app.getVersion(),
+    });
+  } catch { /* ignore */ }
 }
 
 // ── Auto-updater config ───────────────────────────────────────────────────────
-autoUpdater.autoDownload    = true;   // download silently in background
-autoUpdater.autoInstallOnAppQuit = true; // install when user quits
+if (autoUpdater) {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+}
 
 const isDev = !app.isPackaged;
 let mainWindow: BrowserWindow | null = null;
@@ -82,6 +94,27 @@ function createAppIcon(size: number): Electron.NativeImage {
 function createWindow(): void {
   const icon = createAppIcon(64);
 
+  // Set up camera permissions BEFORE creating the window
+  electronSession.defaultSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'camera', 'microphone', 'mediaKeySystem', 'geolocation', 'notifications'];
+    callback(allowed.includes(permission));
+  });
+  electronSession.defaultSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowed = ['media', 'camera', 'microphone'];
+    return allowed.includes(permission);
+  });
+
+  // Also set for partitioned session
+  const partSession = electronSession.fromPartition('persist:spineguardian');
+  partSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    const allowed = ['media', 'camera', 'microphone', 'mediaKeySystem', 'geolocation', 'notifications'];
+    callback(allowed.includes(permission));
+  });
+  partSession.setPermissionCheckHandler((_webContents, permission) => {
+    const allowed = ['media', 'camera', 'microphone'];
+    return allowed.includes(permission);
+  });
+
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
@@ -94,7 +127,7 @@ function createWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
       webSecurity: false,
-      backgroundThrottling: false,   // keep JS timers running when window is hidden
+      backgroundThrottling: false,
     },
     title: 'Spine Guardian AI',
     show: false,
@@ -139,8 +172,8 @@ function createWindow(): void {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:; " +
-          "connect-src 'self' http://localhost:3001 https://localhost:3001 https://*.railway.app https://*.up.railway.app https://api.elevenlabs.io https://api.openai.com blob: data:; " +
-          "media-src 'self' blob: data:; " +
+          "connect-src 'self' http://localhost:3001 https://localhost:3001 https://*.railway.app https://*.up.railway.app https://api.elevenlabs.io https://api.openai.com https://*.supabase.co blob: data:; " +
+          "media-src 'self' blob: data: mediastream:; " +
           "worker-src blob: 'self';"
         ],
       },
@@ -189,26 +222,29 @@ function createTray(): void {
 }
 
 app.whenReady().then(() => {
+  // Register deep link protocol — handles spine-guardian://auth/... URLs
+  if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+      app.setAsDefaultProtocolClient('spine-guardian', process.execPath, [path.resolve(process.argv[1])]);
+    }
+  } else {
+    app.setAsDefaultProtocolClient('spine-guardian');
+  }
+
   createWindow();
   createTray();
 
   // ── Auto-update ─────────────────────────────────────────────────────────
-  if (app.isPackaged) {
-    // Check for updates 3 seconds after launch (don't block startup)
+  if (app.isPackaged && autoUpdater) {
     setTimeout(() => {
-      autoUpdater.checkForUpdatesAndNotify().catch((err) => {
-        console.warn('[updater] check failed:', (err as Error)?.message);
-      });
+      try { autoUpdater.checkForUpdatesAndNotify().catch(() => {}); } catch {}
     }, 3000);
 
-    autoUpdater.on('update-available', (info) => {
-      showTrayBalloon(
-        'Update available',
-        `Spine Guardian ${info.version} is downloading in the background…`
-      );
+    autoUpdater.on('update-available', (info: any) => {
+      showTrayBalloon('Update available', `Spine Guardian ${info.version} is downloading…`);
     });
 
-    autoUpdater.on('update-downloaded', (info) => {
+    autoUpdater.on('update-downloaded', (info: any) => {
       dialog.showMessageBox({
         type: 'info',
         title: 'Update ready',
@@ -217,16 +253,12 @@ app.whenReady().then(() => {
         buttons: ['Restart Now', 'Later'],
         defaultId: 0,
       }).then(({ response }) => {
-        if (response === 0) {
-          isQuitting = true;
-          autoUpdater.quitAndInstall();
-        }
+        if (response === 0) { isQuitting = true; autoUpdater.quitAndInstall(); }
       });
     });
 
-    autoUpdater.on('error', (err) => {
-      console.error('[updater] error:', (err as Error)?.message);
-      if (SENTRY_DSN) Sentry.captureException(err);
+    autoUpdater.on('error', (err: Error) => {
+      console.error('[updater] error:', err?.message);
     });
   }
 
@@ -243,6 +275,25 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+});
+
+// Handle deep link on Windows — app is opened via spine-guardian:// URL
+app.on('second-instance', (_event, commandLine) => {
+  // Someone opened the app with a deep link while it was already running
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+  // Extract the deep link URL and send to renderer
+  const url = commandLine.find((arg) => arg.startsWith('spine-guardian://'));
+  if (url) {
+    mainWindow?.webContents.send('deep-link', url);
+  }
+});
+
+// Handle deep link on Mac
+app.on('open-url', (_event, url) => {
+  mainWindow?.webContents.send('deep-link', url);
 });
 
 // --- IPC Handlers ---
@@ -265,9 +316,20 @@ ipcMain.handle('get-platform', () => process.platform);
 ipcMain.handle('get-app-version', () => app.getVersion());
 
 ipcMain.handle('check-for-updates', () => {
-  if (!app.isPackaged) return { status: 'dev' };
-  autoUpdater.checkForUpdatesAndNotify().catch(() => {});
+  if (!app.isPackaged || !autoUpdater) return { status: 'dev' };
+  try { autoUpdater.checkForUpdatesAndNotify().catch(() => {}); } catch {}
   return { status: 'checking' };
+});
+
+// Debug logger — writes errors to a log file you can read
+ipcMain.handle('log-error', (_event, message: string) => {
+  const logPath = path.join(app.getPath('userData'), 'debug.log');
+  const line = `[${new Date().toISOString()}] ${message}\n`;
+  try {
+    require('fs').appendFileSync(logPath, line);
+    console.error('[renderer]', message);
+  } catch { /* ignore */ }
+  return logPath;
 });
 
 ipcMain.handle('show-tray-notification', (_event, title: string, content: string) => {

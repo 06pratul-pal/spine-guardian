@@ -232,20 +232,32 @@ export function usePostureDetection(
 
       const filesetResolver = await FilesetResolverClass.forVisionTasks(wasmBase);
 
-      landmarkerRef.current = await PoseLandmarkerClass.createFromOptions(
-        filesetResolver,
-        {
-          baseOptions: {
-            modelAssetPath: modelPath,
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          numPoses: 1,
-          minPoseDetectionConfidence: 0.60,
-          minPosePresenceConfidence: 0.60,
-          minTrackingConfidence:     0.60,
-        }
-      );
+      try {
+        landmarkerRef.current = await PoseLandmarkerClass.createFromOptions(
+          filesetResolver,
+          {
+            baseOptions: { modelAssetPath: modelPath, delegate: 'GPU' },
+            runningMode: 'VIDEO',
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.60,
+            minPosePresenceConfidence: 0.60,
+            minTrackingConfidence: 0.60,
+          }
+        );
+      } catch {
+        // GPU failed — fall back to CPU
+        landmarkerRef.current = await PoseLandmarkerClass.createFromOptions(
+          filesetResolver,
+          {
+            baseOptions: { modelAssetPath: modelPath, delegate: 'CPU' },
+            runningMode: 'VIDEO',
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.60,
+            minPosePresenceConfidence: 0.60,
+            minTrackingConfidence: 0.60,
+          }
+        );
+      }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } },
@@ -261,7 +273,16 @@ export function usePostureDetection(
       setIsLoading(false);
       startDetectLoop();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Camera access failed');
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      console.error('[Camera]', msg, err);
+      // Log to file so we can read it without DevTools
+      const api = (window as any).electronAPI;
+      if (api?.logError) {
+        api.logError(`[Camera Error] ${msg}`).then((logPath: string) => {
+          console.log('Error logged to:', logPath);
+        });
+      }
+      setError(msg);
       setIsLoading(false);
     }
   }, [isLoading, isReady, startDetectLoop]);

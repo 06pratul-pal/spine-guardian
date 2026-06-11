@@ -11,6 +11,7 @@ import { addSession, addOrUpdateSnapshot, todayString } from '../lib/database';
 import { buildAndCheckAchievements } from '../lib/achievements';
 import { CalibrationModal } from '../components/CalibrationModal';
 import { clearCalibration, type CalibrationData } from '../lib/calibration';
+import { track } from '../lib/analytics';
 import type { PostureResult } from '../lib/posture-analyzer';
 
 type AlertStatus =
@@ -39,6 +40,7 @@ export function LiveMonitor() {
     enqueueAchievement,
     calibration,
     setCalibration,
+    isPro,
   } = useAppStore();
 
   const personality = PERSONALITIES[settings.personalityId];
@@ -51,6 +53,7 @@ export function LiveMonitor() {
     edgeTtsVoice: settings.edgeTtsVoice,
     openAiApiKey: settings.openAiApiKey,
     useAiMessages: settings.useAiMessages,
+    isPro,
   };
   const { speakWithCooldown, speakTest, cancel, audioRef: voiceAudioRef, configRef: voiceConfigRef } = useVoice(voiceConfig);
 
@@ -123,6 +126,12 @@ export function LiveMonitor() {
             onMessageReady: (msg) => {
               setAlertStatus({ kind: 'fired', msg });
               setTimeout(() => setAlertStatus({ kind: 'idle' }), 5000);
+              void track('alert_fired', {
+                personality: settings.personalityId,
+                score: result.score,
+                bad_seconds: Math.round(badDuration / 1000),
+                is_lying_back: isLyingBack,
+              });
             },
           });
         }
@@ -140,7 +149,13 @@ export function LiveMonitor() {
             issues: result.issues,
             badSeconds: Math.round(badDuration / 1000),
             isViolation: true,
-            onMessageReady: (msg) => showViolation(msg),
+            onMessageReady: (msg) => {
+              showViolation(msg);
+              void track('violation_shown', {
+                personality: settings.personalityId,
+                score: result.score,
+              });
+            },
           });
         }
       } else {
@@ -229,6 +244,7 @@ export function LiveMonitor() {
     setIsMonitoring(true);
     startSession();
     await startCamera();
+    void track('session_started', { personality: settings.personalityId });
   };
 
   const handleStop = async () => {
@@ -274,6 +290,16 @@ export function LiveMonitor() {
         lastSessionType: 'monitoring',
       });
       for (const a of newAchievements) enqueueAchievement(a);
+
+      // Sync to cloud after session ends
+      void useAppStore.getState().syncToCloud();
+
+      void track('session_ended', {
+        duration_seconds: durationSeconds,
+        avg_score: avgScore,
+        slouch_count: slouchCountRef.current,
+        personality: settings.personalityId,
+      });
     }
   };
 

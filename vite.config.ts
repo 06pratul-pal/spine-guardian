@@ -28,5 +28,10 @@ export default defineConfig({
   },
   optimizeDeps: {
     exclude: ['@mediapipe/tasks-vision'],
+    include: [],
+  },
+  // Exclude electron-only packages from renderer bundle
+  ssr: {
+    noExternal: [],
   },
 });

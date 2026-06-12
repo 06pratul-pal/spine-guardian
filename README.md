@@ -12,8 +12,8 @@ Sits silently in your system tray, watches your posture through the webcam using
 |---|---|
 | 👩 Mom Mode | Loving but relentless Hindi-English nagging |
 | 🫠 Gen Z Roast | Unfiltered, unhinged, devastatingly accurate |
-| 💪 Gym Bro | Peak performance motivation only |
-| 🤝 Best Friend | Honest, casual, actually cares |
+| 💪 Gym Bro | Peak performance motivation only, explain why posture impotant |
+| 🤝 Best Friend | Honest, casual, actually cares,friendly bunter |
 
 ---
 

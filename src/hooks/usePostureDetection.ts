@@ -219,16 +219,12 @@ export function usePostureDetection(
     try {
       await ensureMediaPipe();
 
-      // Use local bundled files — no internet required after install
-      const wasmBase =
-        typeof window !== 'undefined' && (window as any).electronAPI
-          ? `${window.location.origin}/mediapipe/wasm`
-          : '/mediapipe/wasm';
-
-      const modelPath =
-        typeof window !== 'undefined' && (window as any).electronAPI
-          ? `${window.location.origin}/mediapipe/pose_landmarker_full.task`
-          : '/mediapipe/pose_landmarker_full.task';
+      // Use local bundled files — no internet required after install.
+      // In Electron (file:// protocol) window.location.origin is "null" for
+      // security reasons — we must use a relative path instead.
+      // In dev (http://localhost:5173) relative paths also work fine.
+      const wasmBase   = './mediapipe/wasm';
+      const modelPath  = './mediapipe/pose_landmarker_full.task';
 
       const filesetResolver = await FilesetResolverClass.forVisionTasks(wasmBase);
 

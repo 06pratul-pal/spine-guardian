@@ -415,6 +415,8 @@ ipcMain.handle(
 );
 
 // ── Edge TTS — free, natural Microsoft voices, no API key needed ──────────────
+// edge-tts v1 exports a plain `tts(text, options)` function that returns a Buffer.
+// It is an ES module, so we must use a dynamic import() — NOT require().
 ipcMain.handle(
   'edge-tts-speak',
   async (
@@ -425,21 +427,21 @@ ipcMain.handle(
     pitch: string
   ): Promise<{ ok: true; base64: string } | { ok: false; error: string }> => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { EdgeTTS } = require('edge-tts') as { EdgeTTS: new () => any };
-      const tts = new EdgeTTS();
-      const chunks: Buffer[] = [];
+      // Dynamic import works for both CJS host and ESM package
+      const edgeTts = await import('edge-tts');
+      // The package exports a `tts` function directly
+      const ttsFunc = (edgeTts as any).tts as (
+        text: string,
+        options?: { voice?: string; rate?: string; pitch?: string }
+      ) => Promise<Buffer>;
 
-      await tts.ttsPromise(text, voice || 'en-US-JennyNeural', {
+      const audioBuffer = await ttsFunc(text, {
+        voice: voice || 'en-US-JennyNeural',
         rate:  rate  || '+0%',
         pitch: pitch || '+0Hz',
       });
 
-      for await (const chunk of tts.toStream()) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-
-      const base64 = Buffer.concat(chunks).toString('base64');
+      const base64 = audioBuffer.toString('base64');
       return { ok: true, base64 };
     } catch (err) {
       return {

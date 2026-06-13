@@ -171,10 +171,10 @@ function createWindow(): void {
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
-          "default-src 'self' 'unsafe-inline' 'unsafe-eval' blob: data:; " +
-          "connect-src 'self' http://localhost:3001 https://localhost:3001 https://*.railway.app https://*.up.railway.app https://api.elevenlabs.io https://api.openai.com https://*.supabase.co blob: data:; " +
-          "media-src 'self' blob: data: mediastream:; " +
-          "worker-src blob: 'self';"
+          "default-src 'self' 'unsafe-inline' 'unsafe-eval' file: blob: data:; " +
+          "connect-src 'self' file: blob: data: http://localhost:* https://localhost:* https://*.railway.app https://*.up.railway.app https://api.elevenlabs.io https://api.openai.com https://*.supabase.co; " +
+          "media-src 'self' file: blob: data: mediastream:; " +
+          "worker-src blob: 'self' file:;"
         ],
       },
     });

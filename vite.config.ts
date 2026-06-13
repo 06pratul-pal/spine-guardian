@@ -3,7 +3,21 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    // Serve .wasm files with correct MIME type so MediaPipe can load them
+    {
+      name: 'wasm-content-type',
+      configureServer(server) {
+        server.middlewares.use((req, res, next) => {
+          if (req.url?.endsWith('.wasm')) {
+            res.setHeader('Content-Type', 'application/wasm');
+          }
+          next();
+        });
+      },
+    },
+  ],
   base: './',
   build: {
     outDir: 'dist/renderer',
@@ -25,13 +39,14 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    headers: {
+      // Allow SharedArrayBuffer + WASM threads in dev
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+    },
   },
   optimizeDeps: {
     exclude: ['@mediapipe/tasks-vision'],
     include: [],
-  },
-  // Exclude electron-only packages from renderer bundle
-  ssr: {
-    noExternal: [],
   },
 });

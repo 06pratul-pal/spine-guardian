@@ -216,68 +216,104 @@ export function usePostureDetection(
     setError(null);
     smootherRef.current = createSmoother();
 
+    // Helper: turn any thrown value into a readable string.
+    // MediaPipe's WASM loader throws DOM Event objects (ErrorEvent / ProgressEvent)
+    // when a file fails to load — not Error instances — so we must handle that.
+    function extractErrorMessage(err: unknown): string {
+      if (err instanceof Error) return `${err.name}: ${err.message}`;
+      if (err && typeof err === 'object') {
+        // DOM ErrorEvent / ProgressEvent
+        const ev = err as Record<string, unknown>;
+        if (ev['message']) return String(ev['message']);
+        if (ev['type'])    return `Event(${ev['type']}) — WASM/model file load failed`;
+        const tag = Object.prototype.toString.call(err);
+        return `${tag} — check that mediapipe files are present in the app bundle`;
+      }
+      return String(err);
+    }
+
+    const logError = (msg: string) => {
+      console.error('[Camera]', msg);
+      const api = (window as any).electronAPI;
+      if (api?.logError) void api.logError(`[Camera Error] ${msg}`);
+    };
+
     try {
       await ensureMediaPipe();
 
-      // Use local bundled files — no internet required after install.
-      // In Electron (file:// protocol) window.location.origin is "null" for
-      // security reasons — we must use a relative path instead.
-      // In dev (http://localhost:5173) relative paths also work fine.
-      const wasmBase   = './mediapipe/wasm';
-      const modelPath  = './mediapipe/pose_landmarker_full.task';
+      // ── Resolve MediaPipe asset paths ──────────────────────────────────────
+      // We must produce absolute URLs that work in both:
+      //   • packaged Electron  → file:///C:/…/dist/renderer/index.html
+      //   • dev server         → http://localhost:5173/
+      //
+      // Approach: derive the base from window.location.href, strip the
+      // filename, then append the mediapipe subfolder.
+      // This is the only method that is correct in all cases because:
+      //   - window.location.origin is "null" on file:// (security restriction)
+      //   - relative paths inside a JS bundle resolve from the JS file location
+      //     (assets/), NOT from the HTML file location
+      //   - new URL('./mediapipe/...', import.meta.url) resolves from assets/ — WRONG
+      const pageHref   = window.location.href;                   // file:///…/renderer/index.html  or  http://localhost:5173/
+      const baseHref   = pageHref.substring(0, pageHref.lastIndexOf('/') + 1); // keep trailing slash
+      const wasmBase   = `${baseHref}mediapipe/wasm`;
+      const modelPath  = `${baseHref}mediapipe/pose_landmarker_full.task`;
+
+      logError(`[init] wasmBase=${wasmBase}`); // will appear in debug.log on success/fail
 
       const filesetResolver = await FilesetResolverClass.forVisionTasks(wasmBase);
+
+      // Try GPU first, fall back to CPU
+      const modelOptions = {
+        runningMode:                  'VIDEO' as const,
+        numPoses:                     1,
+        minPoseDetectionConfidence:   0.55,
+        minPosePresenceConfidence:    0.55,
+        minTrackingConfidence:        0.55,
+      };
 
       try {
         landmarkerRef.current = await PoseLandmarkerClass.createFromOptions(
           filesetResolver,
-          {
-            baseOptions: { modelAssetPath: modelPath, delegate: 'GPU' },
-            runningMode: 'VIDEO',
-            numPoses: 1,
-            minPoseDetectionConfidence: 0.60,
-            minPosePresenceConfidence: 0.60,
-            minTrackingConfidence: 0.60,
-          }
+          { baseOptions: { modelAssetPath: modelPath, delegate: 'GPU' }, ...modelOptions }
         );
-      } catch {
-        // GPU failed — fall back to CPU
+      } catch (gpuErr) {
+        logError(`GPU delegate failed (${extractErrorMessage(gpuErr)}) — retrying with CPU`);
         landmarkerRef.current = await PoseLandmarkerClass.createFromOptions(
           filesetResolver,
-          {
-            baseOptions: { modelAssetPath: modelPath, delegate: 'CPU' },
-            runningMode: 'VIDEO',
-            numPoses: 1,
-            minPoseDetectionConfidence: 0.60,
-            minPosePresenceConfidence: 0.60,
-            minTrackingConfidence: 0.60,
-          }
+          { baseOptions: { modelAssetPath: modelPath, delegate: 'CPU' }, ...modelOptions }
         );
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } },
-      });
+      // ── Camera stream ──────────────────────────────────────────────────────
+      // Try ideal resolution first; fall back to any video if constraints fail
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 } },
+        });
+      } catch {
+        // Constraints failed — try with just video:true (works on all cameras)
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
       streamRef.current = stream;
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        await videoRef.current.play();
+        // play() can reject with a DOMException if the element is not yet mounted —
+        // wrap in a try/catch so we get a proper message instead of [object Event]
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          throw new Error(`Video play() failed: ${extractErrorMessage(playErr)}`);
+        }
       }
 
       setIsReady(true);
       setIsLoading(false);
       startDetectLoop();
     } catch (err) {
-      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      console.error('[Camera]', msg, err);
-      // Log to file so we can read it without DevTools
-      const api = (window as any).electronAPI;
-      if (api?.logError) {
-        api.logError(`[Camera Error] ${msg}`).then((logPath: string) => {
-          console.log('Error logged to:', logPath);
-        });
-      }
+      const msg = extractErrorMessage(err);
+      logError(msg);
       setError(msg);
       setIsLoading(false);
     }

@@ -17,7 +17,12 @@ module.exports = {
     'package.json',
   ],
 
-  asar: false,
+  asar: true,
+  // Unpack mediapipe WASM and model files — they must be accessible as real files
+  // because MediaPipe's FilesetResolver loads them via fetch/XHR (can't read from asar)
+  asarUnpack: [
+    'dist/renderer/mediapipe/**',
+  ],
 
   // ── Auto-update: publish to GitHub Releases ────────────────────────────────
   // Set GH_TOKEN env var when building to push releases automatically.
@@ -51,7 +56,10 @@ module.exports = {
   mac: {
     target: [{ target: 'dmg', arch: ['x64', 'arm64'] }],
     category: 'public.app-category.healthcare-fitness',
-    // For signed builds set: CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_ID_PASS env vars
+    // Unsigned builds — users must right-click → Open to bypass Gatekeeper.
+    // For fully signed builds: set CSC_LINK, CSC_KEY_PASSWORD, APPLE_ID, APPLE_ID_PASS env vars
+    // and uncomment: hardenedRuntime: true, gatekeeperAssess: false
+    hardenedRuntime: false,
   },
 
   dmg: {

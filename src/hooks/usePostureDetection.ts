@@ -13,13 +13,24 @@ type PoseLandmarker = any;
 let PoseLandmarkerClass: any = null;
 let FilesetResolverClass: any = null;
 let mediapipeLoaded = false;
+let mediapipeLoading: Promise<void> | null = null;
 
 async function ensureMediaPipe() {
   if (mediapipeLoaded) return;
-  const vision = await import('@mediapipe/tasks-vision');
-  PoseLandmarkerClass = vision.PoseLandmarker;
-  FilesetResolverClass = vision.FilesetResolver;
-  mediapipeLoaded = true;
+  // If already loading, wait for that promise instead of starting a new one
+  if (mediapipeLoading) return mediapipeLoading;
+  mediapipeLoading = (async () => {
+    try {
+      const vision = await import('@mediapipe/tasks-vision');
+      PoseLandmarkerClass = vision.PoseLandmarker;
+      FilesetResolverClass = vision.FilesetResolver;
+      mediapipeLoaded = true;
+    } finally {
+      // Reset so a failed load can be retried
+      mediapipeLoading = null;
+    }
+  })();
+  return mediapipeLoading;
 }
 
 const DRAW_LANDMARKS = [0, 7, 8, 11, 12, 13, 14, 23, 24];
@@ -41,6 +52,7 @@ export interface UsePostureDetectionReturn {
   startCamera: () => Promise<void>;
   stopCamera: () => void;
   startCalibration: (durationMs: number) => Promise<Landmark[][]>;
+  setPaused: (v: boolean) => void;
 }
 
 export function usePostureDetection(
@@ -63,6 +75,7 @@ export function usePostureDetection(
   const calibrationRef  = useRef(calibration);
   const onResultRef     = useRef(onResult);
   const smootherRef     = useRef(createSmoother());
+  const isPausedRef     = useRef(false);
 
   // Calibration collection
   const calibCollect = useRef<{
@@ -138,6 +151,7 @@ export function usePostureDetection(
   );
 
   const detect = useCallback(() => {
+    if (isPausedRef.current) return;
     const video      = videoRef.current;
     const landmarker = landmarkerRef.current;
 
@@ -210,6 +224,10 @@ export function usePostureDetection(
     });
   }, []);
 
+  const setPaused = useCallback((v: boolean) => {
+    isPausedRef.current = v;
+  }, []);
+
   const startCamera = useCallback(async () => {
     if (isLoading || isReady) return;
     setIsLoading(true);
@@ -239,7 +257,12 @@ export function usePostureDetection(
     };
 
     try {
-      await ensureMediaPipe();
+      await Promise.race([
+        ensureMediaPipe(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('MediaPipe init timed out after 30s — check WASM files')), 30_000)
+        ),
+      ]);
 
       // ── Resolve MediaPipe asset paths ──────────────────────────────────────
       // We must produce absolute URLs that work in both:
@@ -346,5 +369,6 @@ export function usePostureDetection(
     startCamera,
     stopCamera,
     startCalibration,
+    setPaused,
   };
 }

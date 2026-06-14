@@ -32,8 +32,6 @@ export function LiveMonitor() {
     endSession,
     tickGoodSecond,
     tickBadSecond,
-    sessionGoodSeconds,
-    sessionBadSeconds,
     totalXP,
     level,
     streakDays,
@@ -42,6 +40,8 @@ export function LiveMonitor() {
     setCalibration,
     isPro,
   } = useAppStore();
+  // sessionGoodSeconds / sessionBadSeconds are read via useAppStore.getState() in handleStop
+  // to avoid stale closure values
 
   const personality = PERSONALITIES[settings.personalityId];
 
@@ -151,6 +151,10 @@ export function LiveMonitor() {
             isViolation: true,
             onMessageReady: (msg) => {
               showViolation(msg);
+              // Auto-dismiss violation overlay after 15s if user doesn't fix posture
+              setTimeout(() => {
+                useAppStore.getState().hideViolation();
+              }, 15_000);
               void track('violation_shown', {
                 personality: settings.personalityId,
                 score: result.score,
@@ -165,8 +169,11 @@ export function LiveMonitor() {
     },
     [settings, personality, showViolation, setPostureResult, voiceAudioRef, voiceConfigRef, isPaused]);
 
-  const { videoRef, canvasRef, isReady, isLoading, error, startCamera, stopCamera, startCalibration } =
+  const { videoRef, canvasRef, isReady, isLoading, error, startCamera, stopCamera, startCalibration, setPaused } =
     usePostureDetection(settings.sensitivity, handlePostureResult, calibration);
+
+  // Keep hook's internal pause ref in sync with UI pause state
+  useEffect(() => { setPaused(isPaused); }, [isPaused, setPaused]);
 
   // Alert status countdown ticker
   useEffect(() => {
@@ -269,14 +276,16 @@ export function LiveMonitor() {
         ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
         : 0;
 
+      // Read directly from store to avoid stale closure values
+      const { sessionGoodSeconds: goodSecs, sessionBadSeconds: badSecs } = useAppStore.getState();
       await addSession({
         date: todayString(),
         startedAt: sessionStartRef.current,
         endedAt: now,
         type: 'monitoring',
         durationSeconds,
-        goodSeconds: sessionGoodSeconds,
-        badSeconds: sessionBadSeconds,
+        goodSeconds: goodSecs,
+        badSeconds: badSecs,
         avgScore,
         slouchCount: slouchCountRef.current,
       });
@@ -485,13 +494,6 @@ export function LiveMonitor() {
             className="relative rounded-2xl overflow-hidden flex-1 flex items-center justify-center"
             style={{ background: '#0d0d14', border: '1px solid #1e1e2e', minHeight: 320 }}
           >
-            {!isMonitoring && !isLoading && (
-              <div className="flex flex-col items-center gap-3 text-center px-8">
-                <span className="text-4xl">📷</span>
-                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>Camera is off</p>
-                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>Click "Start Monitoring" to begin</p>
-              </div>
-            )}
             {isLoading && (
               <div className="flex flex-col items-center gap-3">
                 <Loader size={28} className="animate-spin" style={{ color: '#7c3aed' }} />
@@ -499,11 +501,26 @@ export function LiveMonitor() {
                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>Initializing pose detection</p>
               </div>
             )}
-            {error && (
-              <div className="flex flex-col items-center gap-3 text-center px-8">
+            {!isLoading && error && (
+              <div className="flex flex-col items-center gap-4 text-center px-8">
                 <AlertTriangle size={28} style={{ color: '#f59e0b' }} />
                 <p className="text-sm font-medium" style={{ color: '#fbbf24' }}>Camera Error</p>
-                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{error}</p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)', maxWidth: 280 }}>{error}</p>
+                <motion.button
+                  whileHover={{ scale: 1.04 }} whileTap={{ scale: 0.96 }}
+                  onClick={handleStart}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold"
+                  style={{ background: 'rgba(124,58,237,0.2)', color: '#a78bfa', border: '1px solid rgba(124,58,237,0.3)' }}
+                >
+                  ↩ Retry
+                </motion.button>
+              </div>
+            )}
+            {!isLoading && !error && !isMonitoring && (
+              <div className="flex flex-col items-center gap-3 text-center px-8">
+                <span className="text-4xl">📷</span>
+                <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>Camera is off</p>
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>Click "Start Monitoring" to begin</p>
               </div>
             )}
             <video ref={videoRef} autoPlay muted playsInline

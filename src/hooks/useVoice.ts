@@ -85,8 +85,12 @@ function pickNoRepeat(pool: string[], key: string): string {
   return pool[idx]!;
 }
 
+/** Call when switching personalities to reset the no-repeat tracker */
+export function resetPickNoRepeat(key: string): void {
+  _usedFallbacks.delete(key);
+}
 
-async function playBlob(
+
   blob: Blob,
   volume: number,
   audioRef: React.MutableRefObject<HTMLAudioElement | null>
@@ -148,8 +152,11 @@ async function serverAlert(opts: {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (serverSecret) headers['x-api-secret'] = serverSecret;
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
   const res = await fetch(`${serverUrl}/api/alert`, {
     method: 'POST',
+    signal: controller.signal,
     headers,
     body: JSON.stringify({
       personalityName:        personality.name,
@@ -166,6 +173,8 @@ async function serverAlert(opts: {
       // settings per personality and severity via getVoiceSettings()
     }),
   });
+
+  clearTimeout(timeoutId);
 
   if (!res.ok) {
     throw new Error(`Server error ${res.status}`);
@@ -358,11 +367,11 @@ export function useVoice(config: VoiceConfig | number) {
 
   const debounceRef = useRef(false);
   const speakWithCooldown = useCallback(
-    (text: string, personality: Personality, _cooldownMs: number): void => {
+    (text: string, personality: Personality, cooldownMs: number): void => {
       if (debounceRef.current) return;
       speak(text, personality);
       debounceRef.current = true;
-      setTimeout(() => { debounceRef.current = false; }, 500);
+      setTimeout(() => { debounceRef.current = false; }, Math.max(cooldownMs, 2000));
     },
     [speak]
   );

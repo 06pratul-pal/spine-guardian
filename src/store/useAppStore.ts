@@ -190,18 +190,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       const localXP = get().totalXP;
       const cloudXP = cloud.total_xp;
 
-      if (cloudXP > localXP) {
+      // Use the highest XP, but keep the highest streak independently
+      const useCloud = cloudXP > localXP;
+      const localData = loadXPData();
+      const bestStreak = Math.max(cloud.streak_days, localData.streakDays);
+
+      if (useCloud) {
         const level    = calculateLevel(cloudXP);
         const levelName = getLevelName(level);
         const xpProgress = getLevelProgress(cloudXP);
-        const xpData = {
+        const merged = {
           totalXP: cloudXP,
-          streakDays: cloud.streak_days,
+          streakDays: bestStreak,
           lastActiveDate: cloud.last_active_date,
-          totalSessions: 0,
+          totalSessions: localData.totalSessions,
         };
-        saveXPData(xpData);
-        set({ totalXP: cloudXP, level, levelName, xpProgress, streakDays: cloud.streak_days });
+        saveXPData(merged);
+        set({ totalXP: cloudXP, level, levelName, xpProgress, streakDays: bestStreak });
+      } else if (bestStreak > localData.streakDays) {
+        // XP stays local but update streak if cloud had a better one
+        saveXPData({ ...localData, streakDays: bestStreak });
+        set({ streakDays: bestStreak });
       }
 
       // Restore settings from cloud if local is default

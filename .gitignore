@@ -9,7 +9,9 @@ release/
 
 # Environment variables — NEVER commit these
 .env
+.env.*
 server/.env
+server/.env.*
 *.env
 
 # Logs

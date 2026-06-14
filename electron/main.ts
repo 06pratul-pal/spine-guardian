@@ -126,7 +126,7 @@ function createWindow(): void {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: false,
+      webSecurity: true,
       backgroundThrottling: false,
     },
     title: 'Spine Guardian AI',

@@ -90,7 +90,7 @@ export function resetPickNoRepeat(key: string): void {
   _usedFallbacks.delete(key);
 }
 
-
+async function playBlob(
   blob: Blob,
   volume: number,
   audioRef: React.MutableRefObject<HTMLAudioElement | null>

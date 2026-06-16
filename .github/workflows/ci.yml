@@ -1,0 +1,36 @@
+name: CI — Build Check
+
+# Runs on every push to main and every pull request
+# Catches broken code before it reaches users
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-check:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript + Vite build check
+        env:
+          VITE_SERVER_URL: https://spine-guardian-production.up.railway.app
+          VITE_SERVER_SECRET: ci_placeholder
+          VITE_SUPABASE_URL: https://placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: placeholder_key
+        run: npm run build
+
+      - name: Build passed
+        run: echo "Build is clean — no TypeScript or bundle errors"

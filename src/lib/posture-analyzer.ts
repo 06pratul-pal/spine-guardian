@@ -81,35 +81,54 @@ export function analyzePosture(
   const debug: Record<string, number> = {};
 
   // ── 0. LYING BACK / SEVERE RECLINE DETECTION ─────────────────────────────
-  // When someone reclines or lies back, the nose appears BELOW the shoulders
-  // in screen space (nose.y > shoulderMid.y in MediaPipe coords where y=0 is top).
-  // In normal upright sitting, nose is always well ABOVE shoulders.
+  // The challenge: when the camera is ABOVE eye level (laptop lid, monitor top)
+  // the nose naturally appears at or below shoulder Y even when sitting upright.
+  // We must use multiple signals together — not just one Y comparison.
+  //
+  // A true lying-back has ALL of these:
+  //   a) Nose Y is significantly below shoulder Y (large margin, not just a little)
+  //   b) Hips are NOT visible (body is reclined away from camera)
+  //   c) The Z depth of nose vs shoulders confirms recline (nose closer to cam)
+  //
+  // A high camera angle has:
+  //   a) Nose Y slightly below or near shoulder Y — but HIPS ARE STILL VISIBLE
+  //   b) Torso looks normal height
+  //
+  // So: only flag lying_back if nose is well below shoulders AND hips are not visible.
+
+  const hasEars = vis(leftEar) && vis(rightEar);
+  const earMid  = hasEars ? mid(leftEar!, rightEar!) : null;
+
+  // We need hips to determine if this is a camera angle issue or real recline
+  const hasHipsEarly = vis(leftHip) && vis(rightHip);
+
   if (vis(nose)) {
-    // nose.y > shoulderMid.y means nose is lower on screen = head below shoulders = lying back
     const headBelowShoulder = nose!.y - shoulderMid.y;
     debug['headBelowShoulder'] = headBelowShoulder;
 
-    if (headBelowShoulder > 0.02) {
-      // Head is at or below shoulder level — severe recline / lying back
-      const penalty = Math.min(60, headBelowShoulder * 300 * sensitivity);
+    // Only flag lying_back if:
+    // 1. Head is significantly below shoulder level (not just slightly)
+    // 2. Hips are NOT visible — if hips are visible, it's just a high camera angle
+    const lyingBackThreshold = 0.08; // raised from 0.02 — requires much more extreme recline
+    if (headBelowShoulder > lyingBackThreshold && !hasHipsEarly) {
+      const penalty = Math.min(50, headBelowShoulder * 200 * sensitivity);
       score -= penalty;
       issues.push('lying_back');
+      debug['lyingBack_triggered'] = 1;
     }
   }
-
-  // Also check using ears if visible — more robust signal
-  const hasEars = vis(leftEar) && vis(rightEar);
-  const earMid  = hasEars ? mid(leftEar!, rightEar!) : null;
 
   if (earMid) {
     const earBelowShoulder = earMid.y - shoulderMid.y;
     debug['earBelowShoulder'] = earBelowShoulder;
 
-    // Ears below shoulder midpoint = definite lying back
-    if (earBelowShoulder > 0.0 && !issues.includes('lying_back')) {
-      const penalty = Math.min(50, earBelowShoulder * 250 * sensitivity);
+    // Ears below shoulder + no hips visible = genuine recline
+    // Raised threshold from 0.0 to 0.06 — small amounts are normal with high camera
+    if (earBelowShoulder > 0.06 && !hasHipsEarly && !issues.includes('lying_back')) {
+      const penalty = Math.min(40, earBelowShoulder * 200 * sensitivity);
       score -= penalty;
       issues.push('lying_back');
+      debug['lyingBack_ear_triggered'] = 1;
     }
   }
 
@@ -131,7 +150,7 @@ export function analyzePosture(
 
   // ─────────────────────────────────────────────────────────────────────────
 
-  const hasHips = vis(leftHip) && vis(rightHip);
+  const hasHips = hasHipsEarly;
   const hipMid  = hasHips ? mid(leftHip!, rightHip!) : null;
 
   // ── 1. Slouching ──────────────────────────────────────────────────────────
@@ -167,13 +186,13 @@ export function analyzePosture(
       }
     }
   } else if (!hasHips) {
-    // ── NO HIPS VISIBLE — apply penalty ─────────────────────────────────
-    // When hips go out of frame, it usually means the person is leaning far
-    // back, forward, or sideways. Don't just skip the check — penalise.
-    // Exception: lying_back already detected above handles that case.
-    if (!issues.includes('lying_back')) {
-      score -= 15;
-      debug['noHipsPenalty'] = 15;
+    // ── NO HIPS VISIBLE ───────────────────────────────────────────────────
+    // Hips not in frame — common with laptops where camera only sees upper body.
+    // Apply a small penalty only if lying_back was already confirmed above.
+    // Don't penalize just for hips being out of frame — that's normal.
+    if (issues.includes('lying_back')) {
+      score -= 10;
+      debug['noHipsPenalty'] = 10;
     }
   }
 
@@ -236,26 +255,14 @@ export function analyzePosture(
   }
 
   // ── 7. Camera angle / face tilt check ────────────────────────────────────
-  // When someone reclines, the camera looks UP at them — the face appears
-  // foreshortened and the nose is near the BOTTOM of the face bbox.
-  // We detect this via nose vs ear vertical position:
-  // In normal upright sitting: nose.y > earMid.y (nose lower than ears on screen)
-  // When lying back severely: nose.y ≈ earMid.y or even nose.y < earMid.y
+  // NOTE: We no longer use nose-ear Y diff to detect lying_back here.
+  // That check was too sensitive for cameras above eye level (laptops).
+  // lying_back is now only detected in check 0 using the hips-visible guard.
+  // This section is kept for future use but does NOT add lying_back.
   if (vis(nose) && earMid) {
     const noseEarYDiff = nose!.y - earMid.y;
     debug['noseEarYDiff'] = noseEarYDiff;
-
-    // In correct posture nose should be meaningfully below ears on screen
-    // (nose.y > earMid.y in MediaPipe Y where 0=top)
-    // If nose is above or level with ears = head tilted way back
-    if (noseEarYDiff < 0.02) {
-      const deficit = 0.02 - noseEarYDiff;
-      const penalty = Math.min(25, deficit * 200 * sensitivity);
-      score -= penalty;
-      if (!issues.includes('lying_back') && !issues.includes('forward_head')) {
-        issues.push('lying_back');
-      }
-    }
+    // Reserved — no action taken here to avoid false positives
   }
 
   const finalScore = Math.max(0, Math.min(100, Math.round(score)));

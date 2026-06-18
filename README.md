@@ -1,112 +1,190 @@
 # 🦴 Spine Guardian AI
 
-**Your AI posture companion that actually talks back.**
+> **Your AI posture companion that actually talks back.**
 
-Sits silently in your system tray, watches your posture through the webcam using on-device AI, and calls you out with personality when you slouch. All processing happens 100% locally — no data ever leaves your machine.
+Sits silently in your system tray, watches your posture through your webcam using on-device AI, and calls you out — in character — when you slouch. All processing happens **100% locally** — no data ever leaves your machine.
 
 ---
 
-## MVP Personalities
+## ✨ Features
 
-| Mode | Vibe |
+- **Real-time posture detection** — MediaPipe Pose (33 landmarks, GPU-accelerated WASM)
+- **0–100 posture score** — updates live with smoothed temporal averaging
+- **7 posture issues detected** — forward head, slouching, rounded back, uneven shoulders, forward lean, neck tilt, lying back
+- **Personal calibration** — sit upright for 15s to set your personal baseline
+- **9 AI personalities** — each with unique voice, tone, and escalating messages
+- **3 voice modes** — Edge TTS (free, natural), ElevenLabs (premium), Browser TTS (fallback)
+- **AI-generated roasts** — Pro users get GPT-4o-mini generated, never-repeat alerts
+- **XP + levels + streaks** — gamified posture improvement
+- **Achievement system** — unlock badges for consistent good posture
+- **Analytics dashboard** — daily/weekly posture history and trends
+- **Focus sessions** — timed work blocks with posture tracking
+- **System tray** — runs silently in background, always watching
+- **Auto-update** — gets new versions automatically via GitHub Releases
+- **Supabase sync** — XP, streaks, and settings sync across reinstalls
+
+---
+
+## 🎭 Personalities
+
+| Personality | Vibe |
 |---|---|
 | 👩 Mom Mode | Loving but relentless Hindi-English nagging |
 | 🫠 Gen Z Roast | Unfiltered, unhinged, devastatingly accurate |
-| 💪 Gym Bro | Peak performance motivation only, explain why posture impotant |
-| 🤝 Best Friend | Honest, casual, actually cares,friendly bunter |
+| 💪 Gym Bro | Peak performance motivation only |
+| 🤝 Best Friend | Honest, casual, actually cares |
+| ⛩️ Anime Sensei | Ancient wisdom, deep disappointment |
+| 🎖️ Drill Sergeant | Military precision, zero excuses |
+| 🌹 Romantic | Heartbroken every time you slouch |
+| 📐 Strict Teacher | Formal, educational, detention incoming |
+| 🇮🇳 Desi Yaar | Pure Hinglish roasts that hit different |
 
 ---
 
-## Prerequisites
+## 🚀 Quick Start
 
-- **Node.js 18+** — [nodejs.org](https://nodejs.org)
+### Prerequisites
+- **Node.js 20+** — [nodejs.org](https://nodejs.org)
 - **Webcam** — built-in or external
-- **Internet on first run** — to download the MediaPipe pose model (~3MB, cached after)
-- **Windows 10/11** (or macOS)
+- **Windows 10/11** — Mac support coming soon
 
----
-
-## Quick Start (Development)
-
+### Development
 ```bash
-# 1. Install dependencies
+# Install dependencies
 npm install
 
-# 2. Run in development mode
+# Run in development mode (Vite + Electron together)
 npm run dev
 ```
 
-This opens the app window immediately. The webcam and AI activate when you click **Start Monitoring**.
+The app opens immediately. Click **Start Monitoring** to activate the webcam and AI.
 
----
-
-## Build for Windows
-
+### Build Windows Installer
 ```bash
-# Build the app + create Windows installer
 npm run build:win
 ```
-
-Output: `release/Spine Guardian AI Setup.exe`
-
----
-
-## How It Works
-
-1. **MediaPipe Pose** — runs in the renderer (Chromium) context, fully offline after first model download
-2. **Posture Analysis** — checks shoulder symmetry, head position, neck forward lean, screen distance
-3. **Scoring** — 0–100 score, updates in real time
-4. **Alerts** — bad posture for 10+ seconds triggers voice alert
-5. **Violation Overlay** — very bad posture (< 40 score) for 30+ seconds triggers dramatic fullscreen alert
-6. **System Tray** — close the window to minimize to tray; double-click icon to restore
+Output: `release/Spine Guardian AI Setup 1.0.0-mvp.exe`
 
 ---
 
-## Architecture Notes
+## 📸 How to Get the Best Score
+
+- Camera at **eye level** — not above or below
+- **Hips visible** in frame — don't sit too close
+- **Ears directly above shoulders** — no chin jutting forward
+- **Shoulders level** — not hunched or uneven
+- **Face the camera straight** — no head tilt
+
+Run **Calibrate** once with good posture — the app adjusts all thresholds to your body and camera angle.
+
+---
+
+## 🏗️ Architecture
 
 ```
 spine-guardian/
-├── electron/          # Main process (Node.js / Electron)
-│   ├── main.ts        # Window, tray, IPC
-│   └── preload.ts     # Secure bridge to renderer
-├── src/               # Renderer (React + TypeScript)
-│   ├── lib/           # Personalities, posture analysis, XP
-│   ├── hooks/         # MediaPipe integration, Web Speech API
-│   ├── store/         # Zustand global state
-│   ├── components/    # Layout, ScoreRing, ViolationOverlay
-│   └── pages/         # Dashboard, LiveMonitor, Settings
-├── vite.config.ts     # Renderer bundler
-└── tsconfig.*.json    # Renderer + electron separate configs
+├── electron/              # Main process (Node.js / Electron)
+│   ├── main.ts            # Window, tray, IPC handlers, Edge TTS, ElevenLabs proxy
+│   └── preload.ts         # Secure contextBridge to renderer
+├── src/                   # Renderer (React + TypeScript)
+│   ├── lib/
+│   │   ├── posture-analyzer.ts   # MediaPipe landmark → score + issues
+│   │   ├── calibration.ts        # Personal baseline capture + storage
+│   │   ├── personalities.ts      # All 9 personalities + message pools
+│   │   ├── xp-system.ts          # XP, levels, streaks
+│   │   ├── achievements.ts       # Achievement definitions + unlock logic
+│   │   ├── database.ts           # IndexedDB via idb (sessions, snapshots)
+│   │   ├── analytics.ts          # Supabase event tracking
+│   │   └── supabase.ts           # Auth + cloud sync
+│   ├── hooks/
+│   │   ├── usePostureDetection.ts  # MediaPipe camera loop + overlay drawing
+│   │   └── useVoice.ts             # Voice pipeline (server → ElevenLabs → Edge → browser)
+│   ├── store/
+│   │   └── useAppStore.ts          # Zustand global state
+│   ├── components/
+│   │   ├── Layout.tsx              # Sidebar navigation
+│   │   ├── ScoreRing.tsx           # Animated posture score circle
+│   │   ├── ViolationOverlay.tsx    # Fullscreen bad posture alert
+│   │   ├── AchievementToast.tsx    # Achievement unlock notification
+│   │   └── CalibrationModal.tsx    # Personal baseline capture UI
+│   └── pages/
+│       ├── Dashboard.tsx      # Home — score, stats, quick start
+│       ├── LiveMonitor.tsx    # Camera feed + real-time detection
+│       ├── Analytics.tsx      # History charts
+│       ├── FocusSession.tsx   # Timed work sessions
+│       ├── Settings.tsx       # All configuration
+│       ├── Onboarding.tsx     # First-run flow
+│       ├── Auth.tsx           # Supabase auth
+│       └── Upgrade.tsx        # Pro subscription / Stripe checkout
+├── server/                # Express backend (Railway)
+│   └── index.js           # OpenAI roast generation + ElevenLabs TTS proxy + Stripe
+├── public/mediapipe/      # Bundled WASM + pose model (fully offline)
+├── electron-builder.config.cjs
+├── vite.config.ts
+└── .github/workflows/
+    ├── ci.yml             # Build check on every push to main
+    └── release.yml        # Auto-build Windows + Mac on version tag
 ```
 
-**State persistence:** `localStorage` (no external DB for MVP)  
-**Voice:** Web Speech API (built-in browser TTS, free, offline)  
-**Pose detection:** MediaPipe Tasks Vision (WASM, GPU-accelerated)
+---
+
+## ⚙️ Environment Variables
+
+Create a `.env` file in the root:
+
+```env
+VITE_SERVER_URL=https://your-railway-server.up.railway.app
+VITE_SERVER_SECRET=your_secret_here
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_anon_key_here
+```
+
+Create a `server/.env` file:
+
+```env
+OPENAI_API_KEY=your_openai_key
+ELEVENLABS_API_KEY=your_elevenlabs_key
+API_SECRET=your_secret_here
+STRIPE_SECRET_KEY=your_stripe_key
+PORT=3001
+```
 
 ---
 
-## ElevenLabs Voice (Future)
+## 🚢 Releasing a New Version
 
-The voice system is designed for easy upgrade. When you're ready:
+```bash
+# Tag the version — GitHub Actions builds Windows + Mac automatically
+git tag v1.0.1
+git push origin v1.0.1
+```
 
-1. Set up a backend server with your ElevenLabs API key
-2. Replace `useVoice.ts` to call your server instead of Web Speech API
-3. Add subscription validation as middleware on the backend
-4. Your API key never touches the user's machine
+GitHub Actions will:
+1. Build `Spine Guardian AI Setup v1.0.1.exe` on Windows runner
+2. Build `Spine Guardian AI v1.0.1.dmg` on Mac runner
+3. Publish both to GitHub Releases automatically
 
 ---
 
-## Settings
+## ⚙️ Settings
 
 | Setting | Description |
 |---|---|
-| Sensitivity | How strict posture detection is (0.5x = lenient, 2x = strict) |
-| Voice Volume | Volume of voice alerts (0–100%) |
-| Alert Delay | How long bad posture lasts before an alert fires (5–60s) |
-| Cooldown | Minimum time between consecutive alerts (1–10 min) |
+| Sensitivity | How strict detection is (0.5x = lenient, 2x = strict) |
+| Voice Volume | Volume of alerts (0–100%) |
+| Alert Delay | Bad posture duration before alert fires (5–60s) |
+| Cooldown | Minimum time between alerts (30s–10min) |
+| Voice Mode | Edge TTS / ElevenLabs / Browser TTS |
+| Personality | Which character calls you out |
 
 ---
 
-## Privacy
+## 🔒 Privacy
 
-> **100% Local Processing.** No webcam images, video frames, posture data, or any user information is ever transmitted to any server. Everything runs on your machine.
+**100% local processing.** No webcam images, video frames, posture data, or biometric information is ever transmitted to any server. MediaPipe runs entirely in WASM on your machine. The only network calls are voice generation (Edge TTS via Microsoft, ElevenLabs if configured) and optional Supabase sync for your XP/streaks.
+
+---
+
+## 📄 License
+
+MIT — see [LICENSE](LICENSE)

@@ -66,11 +66,15 @@ export function LiveMonitor() {
   const sessionStartRef       = useRef<number>(0);
   const scoresRef             = useRef<number[]>([]);
   const slouchCountRef        = useRef(0);
+  // Stand-up reminder — fires after 60 minutes of continuous sitting
+  const standUpIntervalRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const STAND_UP_INTERVAL_MS  = 60 * 60 * 1000; // 60 minutes
 
   const [alertStatus,     setAlertStatus]     = useState<AlertStatus>({ kind: 'idle' });
   const [testingVoice,    setTestingVoice]     = useState(false);
   const [showCalibModal,  setShowCalibModal]   = useState(false);
   const [isPaused,        setIsPaused]         = useState(false);
+  const [standUpBanner,   setStandUpBanner]    = useState(false);
 
   async function writeSnapshot() {
     if (scoresRef.current.length === 0) return;
@@ -244,6 +248,21 @@ export function LiveMonitor() {
     return () => { if (snapshotIntervalRef.current) clearInterval(snapshotIntervalRef.current); };
   }, [isMonitoring, isReady]);
 
+  // Stand-up reminder — fires every 60 minutes of continuous monitoring
+  useEffect(() => {
+    if (!isMonitoring || !isReady || isPaused) {
+      if (standUpIntervalRef.current) { clearInterval(standUpIntervalRef.current); standUpIntervalRef.current = null; }
+      return;
+    }
+    standUpIntervalRef.current = setInterval(() => {
+      setStandUpBanner(true);
+      // Auto-hide after 30s
+      setTimeout(() => setStandUpBanner(false), 30_000);
+      void track('stand_up_reminder_shown');
+    }, STAND_UP_INTERVAL_MS);
+    return () => { if (standUpIntervalRef.current) clearInterval(standUpIntervalRef.current); };
+  }, [isMonitoring, isReady, isPaused]);
+
   const handleStart = async () => {
     sessionStartRef.current   = Date.now();
     slouchCountRef.current    = 0;
@@ -257,6 +276,7 @@ export function LiveMonitor() {
   const handleStop = async () => {
     setIsMonitoring(false);
     setIsPaused(false);
+    setStandUpBanner(false);
     endSession();
     stopCamera();
     cancel();
@@ -484,6 +504,32 @@ export function LiveMonitor() {
                 </span>
               </>
             )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Stand-up reminder banner */}
+      <AnimatePresence>
+        {standUpBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="flex items-center justify-between px-4 py-2.5 rounded-xl text-xs font-medium"
+            style={{
+              background: 'rgba(16,185,129,0.1)',
+              border: '1px solid rgba(16,185,129,0.25)',
+              color: '#34d399',
+            }}
+          >
+            <span>🧘 You've been sitting for an hour — stand up, stretch, hydrate.</span>
+            <button
+              onClick={() => setStandUpBanner(false)}
+              className="ml-4 opacity-50 hover:opacity-100"
+            >
+              <X size={12} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

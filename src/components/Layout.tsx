@@ -44,7 +44,7 @@ export function Layout({ children, onUpgrade }: { children: React.ReactNode; onU
     :                       '#ef4444';
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#07070d' }}>
+    <div className="flex h-screen w-screen overflow-hidden" style={{ background: '#040d1a' }}>
 
       {/* Sidebar */}
       <aside
@@ -53,7 +53,7 @@ export function Layout({ children, onUpgrade }: { children: React.ReactNode; onU
       >
         {/* Logo */}
         <div className="mb-3 flex items-center justify-center w-10 h-10 rounded-2xl"
-          style={{ background: 'linear-gradient(135deg,rgba(124,58,237,0.3),rgba(109,40,217,0.15))', border: '1px solid rgba(124,58,237,0.3)' }}
+          style={{ background: 'linear-gradient(135deg,rgba(14,165,233,0.25),rgba(6,182,212,0.12))', border: '1px solid rgba(14,165,233,0.3)' }}
         >
           <span className="text-lg">🦴</span>
         </div>
@@ -73,11 +73,11 @@ export function Layout({ children, onUpgrade }: { children: React.ReactNode; onU
                 style={{
                   width: '100%', height: 44,
                   background: isActive
-                    ? 'linear-gradient(135deg,rgba(124,58,237,0.22),rgba(109,40,217,0.14))'
+                    ? 'linear-gradient(135deg,rgba(14,165,233,0.18),rgba(6,182,212,0.10))'
                     : 'transparent',
-                  color: isActive ? '#c4b5fd' : 'rgba(255,255,255,0.25)',
-                  border: isActive ? '1px solid rgba(124,58,237,0.3)' : '1px solid transparent',
-                  boxShadow: isActive ? '0 0 16px rgba(124,58,237,0.12)' : 'none',
+                  color: isActive ? '#7dd3fc' : 'rgba(255,255,255,0.22)',
+                  border: isActive ? '1px solid rgba(14,165,233,0.28)' : '1px solid transparent',
+                  boxShadow: isActive ? '0 0 16px rgba(14,165,233,0.10)' : 'none',
                 }}
                 title={item.label}
               >
@@ -85,7 +85,7 @@ export function Layout({ children, onUpgrade }: { children: React.ReactNode; onU
                   <motion.div
                     layoutId="nav-pill"
                     className="absolute left-0 top-1/2 -translate-y-1/2 rounded-r-full"
-                    style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#a78bfa,#7c3aed)' }}
+                    style={{ width: 3, height: 20, background: 'linear-gradient(180deg,#38bdf8,#0ea5e9)' }}
                     transition={{ type: 'spring', damping: 28, stiffness: 380 }}
                   />
                 )}
@@ -132,9 +132,9 @@ export function Layout({ children, onUpgrade }: { children: React.ReactNode; onU
             className="flex items-center justify-center rounded-xl mb-1"
             style={{
               width: 40, height: 40,
-              background: 'linear-gradient(135deg,rgba(124,58,237,0.3),rgba(109,40,217,0.2))',
-              border: '1px solid rgba(124,58,237,0.4)',
-              color: '#a78bfa',
+              background: 'linear-gradient(135deg,rgba(14,165,233,0.25),rgba(6,182,212,0.16))',
+              border: '1px solid rgba(14,165,233,0.38)',
+              color: '#38bdf8',
             }}
             title="Upgrade to Pro"
           >

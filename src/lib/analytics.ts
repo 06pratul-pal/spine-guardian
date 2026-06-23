@@ -14,6 +14,7 @@ export type AnalyticsEvent =
   | 'achievement_unlocked'     // achievement earned
   | 'upgrade_modal_opened'     // user clicked upgrade
   | 'settings_changed'         // user changed a setting
+  | 'stand_up_reminder_shown'  // stand-up reminder banner shown after 60min
   | 'page_viewed';             // user navigated to a page
 
 // ── Queue for offline events ──────────────────────────────────────────────────

@@ -107,12 +107,12 @@ export function LiveMonitor() {
         }
         const badDuration    = now - badPostureStartRef.current;
         const cooldownPassed = now - lastAlertTimeRef.current > cooldownMs;
+        const isLyingBack    = result.issues.includes('lying_back');
 
         if (badDuration >= alertDelayMs && cooldownPassed) {
           // Mark cooldown immediately to prevent double-firing
           lastAlertTimeRef.current = now;
 
-          const isLyingBack = result.issues.includes('lying_back');
           const msgPool = isLyingBack
             ? personality.violationMessages
             : personality.badPostureMessages;

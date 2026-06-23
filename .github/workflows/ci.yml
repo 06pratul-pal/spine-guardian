@@ -1,7 +1,5 @@
 name: CI — Build Check
 
-# Runs on every push to main and every pull request
-# Catches broken code before it reaches users
 on:
   push:
     branches: [main]
@@ -10,35 +8,30 @@ on:
 
 jobs:
   build-check:
-    runs-on: ubuntu-latest  # faster + cheaper than windows-latest
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
-      - name: TypeScript check (renderer only)
+      - name: Type check
         run: npx tsc --noEmit
         env:
           VITE_SERVER_URL: https://spine-guardian-production.up.railway.app
-          VITE_SERVER_SECRET: ci_placeholder
+          VITE_SERVER_SECRET: placeholder
           VITE_SUPABASE_URL: https://placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: placeholder_key
+          VITE_SUPABASE_ANON_KEY: placeholder
 
-      - name: Vite build check (renderer)
+      - name: Vite build
         run: npx vite build
         env:
           VITE_SERVER_URL: https://spine-guardian-production.up.railway.app
-          VITE_SERVER_SECRET: ci_placeholder
+          VITE_SERVER_SECRET: placeholder
           VITE_SUPABASE_URL: https://placeholder.supabase.co
-          VITE_SUPABASE_ANON_KEY: placeholder_key
-
-      - name: Build passed
-        run: echo "Build is clean — no TypeScript or bundle errors"
+          VITE_SUPABASE_ANON_KEY: placeholder
